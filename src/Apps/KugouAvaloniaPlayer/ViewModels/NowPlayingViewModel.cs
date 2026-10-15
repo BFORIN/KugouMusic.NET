@@ -20,7 +20,7 @@ namespace KugouAvaloniaPlayer.ViewModels;
 
 public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 {
-    private static readonly TimeSpan PortraitCycleInterval = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan PortraitCycleInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PortraitFadeDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan PortraitPrepareDelay = TimeSpan.FromMilliseconds(80);
     private static readonly IBrush DefaultLyricBrush = new SolidColorBrush(Colors.White);
@@ -607,24 +607,32 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    ///     交替轮播取图：从当前歌手开始轮转，每个歌手按各自索引取一张。
+    ///     交替轮播取图：从当前歌手开始轮转，每个歌手按各自索引取一张；
+    ///     若取到的图与当前显示图相同（如首张已被 ApplyPortraitUrls 展示），则继续取下一张。
     /// </summary>
     private string? GetNextAlternatingPortraitUrl()
     {
         if (_portraitGroups.Count == 0)
             return null;
 
-        for (var i = 0; i < _portraitGroups.Count; i++)
-        {
-            var groupIndex = (_currentPortraitGroup + i) % _portraitGroups.Count;
-            var images = _portraitGroups[groupIndex];
-            if (images.Count == 0)
-                continue;
+        var current = _isPortraitLayerAActive ? PortraitBackgroundA : PortraitBackgroundB;
 
-            var url = images[_portraitGroupIndices[groupIndex]];
-            _portraitGroupIndices[groupIndex] = (_portraitGroupIndices[groupIndex] + 1) % images.Count;
-            _currentPortraitGroup = (groupIndex + 1) % _portraitGroups.Count;
-            return url;
+        for (var attempt = 0; attempt <= _portraitGroups.Count; attempt++)
+        {
+            for (var i = 0; i < _portraitGroups.Count; i++)
+            {
+                var groupIndex = (_currentPortraitGroup + i) % _portraitGroups.Count;
+                var images = _portraitGroups[groupIndex];
+                if (images.Count == 0)
+                    continue;
+
+                var url = images[_portraitGroupIndices[groupIndex]];
+                _portraitGroupIndices[groupIndex] = (_portraitGroupIndices[groupIndex] + 1) % images.Count;
+                _currentPortraitGroup = (groupIndex + 1) % _portraitGroups.Count;
+
+                if (!string.Equals(url, current, StringComparison.Ordinal))
+                    return url;
+            }
         }
 
         return null;
