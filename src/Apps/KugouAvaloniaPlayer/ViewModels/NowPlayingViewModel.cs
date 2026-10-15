@@ -830,8 +830,14 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
             {
                 foreach (var image in item.Images)
                 {
-                    if (!string.IsNullOrWhiteSpace(image.File))
-                        urls.Add(image.File);
+                    if (string.IsNullOrWhiteSpace(image.File))
+                        continue;
+
+                    // singerimg.kugou.com 的 http 地址会被 .NET HttpClient 403 拒绝，统一升级为 https。
+                    var file = image.File.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        ? "https://" + image.File[7..]
+                        : image.File;
+                    urls.Add(file);
                 }
             }
         }
