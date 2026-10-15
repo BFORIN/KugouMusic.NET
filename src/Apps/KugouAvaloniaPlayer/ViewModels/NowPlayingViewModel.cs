@@ -29,7 +29,7 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
     private readonly ILogger<NowPlayingViewModel> _logger;
     private readonly IMainWindowService _mainWindowService;
     private readonly ISongInteractionService _songInteractionService;
-    private readonly SongClient _songClient;
+    private readonly ArtistClient _artistClient;
     private readonly IUiPreferencesState _uiPreferencesState;
     private CancellationTokenSource? _portraitCancellation;
     private IReadOnlyList<string> _portraitUrls = [];
@@ -39,14 +39,14 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 
     public NowPlayingViewModel(
         PlayerViewModel player,
-        SongClient songClient,
+        ArtistClient artistClient,
         ILogger<NowPlayingViewModel> logger,
         IUiPreferencesState uiPreferencesState,
         IMainWindowService mainWindowService,
         ISongInteractionService songInteractionService)
     {
         Player = player;
-        _songClient = songClient;
+        _artistClient = artistClient;
         _logger = logger;
         _uiPreferencesState = uiPreferencesState;
         _mainWindowService = mainWindowService;
@@ -431,13 +431,12 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
     private async Task PrefetchPortraitAvailabilityAsync()
     {
         var song = Player.DisplayedPlayingSong;
-        if (string.IsNullOrWhiteSpace(song?.Hash))
+        if (song == null || !song.Singers.Exists(s => s.Id > 0))
             return;
 
         try
         {
-            var response = await _songClient.GetAudioImagesAsync(song.Hash, count: 1);
-            var urls = ExtractPortraitUrls(response);
+            var urls = await FetchPortraitUrlsAsync(song);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (Player.DisplayedPlayingSong?.Hash != song.Hash)
@@ -528,7 +527,7 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         ClearPortraitLayers();
 
         var song = Player.DisplayedPlayingSong;
-        if (!IsPortraitModeEnabled || string.IsNullOrWhiteSpace(song?.Hash))
+        if (!IsPortraitModeEnabled || song == null || !song.Singers.Exists(s => s.Id > 0))
             return;
 
         var cancellation = new CancellationTokenSource();
@@ -538,10 +537,8 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var response = await _songClient.GetAudioImagesAsync(song.Hash, count: 5);
+            var urls = await FetchPortraitUrlsAsync(song, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-
-            var urls = ExtractPortraitUrls(response);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (cancellationToken.IsCancellationRequested || !IsPortraitModeEnabled)
@@ -783,31 +780,71 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         TranslationFontSize = Math.Max(14, Math.Round(clamped * 0.62, 1));
     }
 
-    private static IReadOnlyList<string> ExtractPortraitUrls(AudioImageResponse? response)
+    /// <summary>
+    ///     按歌手 ID 获取写真（酷狗开放平台 /kmr/v1/author/extend），支持多歌手合并与去重。
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FetchPortraitUrlsAsync(
+        SongItem song,
+        CancellationToken cancellationToken = default)
     {
-        if (response == null)
-            return [];
-
-        var authors = response.Authors.AsValueEnumerable().ToList();
-        if (authors.Count == 0)
-            return [];
-
-        var urls = new List<string>();
-        foreach (var author in authors)
+        var authorIds = new List<long>();
+        foreach (var singer in song.Singers)
         {
-            foreach (var pair in author.Images)
-                urls.AddRange(pair.Value.AsValueEnumerable().Select(x => NormalizePortraitUrl(x.SizablePortrait)).ToArray());
+            if (singer.Id > 0 && !authorIds.Contains(singer.Id))
+                authorIds.Add(singer.Id);
+        }
+        if (authorIds.Count == 0)
+            return [];
+
+        var tasks = new List<Task<List<string>>>(authorIds.Count);
+        foreach (var authorId in authorIds)
+            tasks.Add(FetchAuthorPortraitUrlsAsync(authorId, cancellationToken));
+
+        var results = await Task.WhenAll(tasks);
+
+        var distinct = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var group in results)
+        {
+            foreach (var url in group)
+            {
+                if (!string.IsNullOrWhiteSpace(url) && seen.Add(url))
+                    distinct.Add(url);
+            }
         }
 
-        return urls
-            .AsValueEnumerable().Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return distinct;
     }
 
-    private static string NormalizePortraitUrl(string? url)
+    private async Task<List<string>> FetchAuthorPortraitUrlsAsync(long authorId, CancellationToken cancellationToken)
     {
-        return string.IsNullOrWhiteSpace(url) ? string.Empty : url.Replace("{size}", "800");
+        var urls = new List<string>();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var items = await _artistClient.GetExtendImagesAsync(authorId.ToString());
+            if (items == null)
+                return urls;
+
+            foreach (var item in items)
+            {
+                foreach (var image in item.Images)
+                {
+                    if (!string.IsNullOrWhiteSpace(image.File))
+                        urls.Add(image.File);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "获取歌手写真失败，authorId={AuthorId}", authorId);
+        }
+
+        return urls;
     }
 
     private static Color ParseColorOrDefault(string? colorText, Color fallback)
