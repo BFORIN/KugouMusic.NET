@@ -20,7 +20,7 @@ namespace KugouAvaloniaPlayer.ViewModels;
 
 public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 {
-    private static readonly TimeSpan PortraitCycleInterval = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan PortraitCycleInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan PortraitFadeDuration = TimeSpan.FromMilliseconds(700);
     private static readonly TimeSpan PortraitPrepareDelay = TimeSpan.FromMilliseconds(80);
     private static readonly IBrush DefaultLyricBrush = new SolidColorBrush(Colors.White);
@@ -29,24 +29,25 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
     private readonly ILogger<NowPlayingViewModel> _logger;
     private readonly IMainWindowService _mainWindowService;
     private readonly ISongInteractionService _songInteractionService;
-    private readonly SongClient _songClient;
+    private readonly ArtistClient _artistClient;
     private readonly IUiPreferencesState _uiPreferencesState;
     private CancellationTokenSource? _portraitCancellation;
-    private IReadOnlyList<string> _portraitUrls = [];
+    private List<List<string>> _portraitGroups = [];
     private bool _isPortraitLayerAActive = true;
-    private int _portraitIndex;
+    private int[] _portraitGroupIndices = [];
+    private int _currentPortraitGroup;
     private bool _disposed;
 
     public NowPlayingViewModel(
         PlayerViewModel player,
-        SongClient songClient,
+        ArtistClient artistClient,
         ILogger<NowPlayingViewModel> logger,
         IUiPreferencesState uiPreferencesState,
         IMainWindowService mainWindowService,
         ISongInteractionService songInteractionService)
     {
         Player = player;
-        _songClient = songClient;
+        _artistClient = artistClient;
         _logger = logger;
         _uiPreferencesState = uiPreferencesState;
         _mainWindowService = mainWindowService;
@@ -431,19 +432,18 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
     private async Task PrefetchPortraitAvailabilityAsync()
     {
         var song = Player.DisplayedPlayingSong;
-        if (string.IsNullOrWhiteSpace(song?.Hash))
+        if (song == null || !song.Singers.Exists(s => s.Id > 0))
             return;
 
         try
         {
-            var response = await _songClient.GetAudioImagesAsync(song.Hash, count: 1);
-            var urls = ExtractPortraitUrls(response);
+            var groups = await FetchPortraitUrlsAsync(song);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (Player.DisplayedPlayingSong?.Hash != song.Hash)
                     return;
 
-                IsPortraitAvailable = urls.Count > 0;
+                IsPortraitAvailable = groups.Count > 0;
                 if (!IsPortraitAvailable)
                     IsPortraitModeEnabled = false;
             });
@@ -528,7 +528,7 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         ClearPortraitLayers();
 
         var song = Player.DisplayedPlayingSong;
-        if (!IsPortraitModeEnabled || string.IsNullOrWhiteSpace(song?.Hash))
+        if (!IsPortraitModeEnabled || song == null || !song.Singers.Exists(s => s.Id > 0))
             return;
 
         var cancellation = new CancellationTokenSource();
@@ -538,21 +538,22 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var response = await _songClient.GetAudioImagesAsync(song.Hash, count: 5);
+            var groups = await FetchPortraitUrlsAsync(song, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
-
-            var urls = ExtractPortraitUrls(response);
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (cancellationToken.IsCancellationRequested || !IsPortraitModeEnabled)
                     return;
 
-                ApplyPortraitUrls(urls);
+                ApplyPortraitUrls(groups);
                 IsPortraitLoading = false;
             });
 
-            if (urls.Count > 1)
-                _ = RunPortraitCarouselAsync(urls, cancellationToken);
+            var totalImages = 0;
+            foreach (var group in groups)
+                totalImages += group.Count;
+            if (totalImages > 1)
+                _ = RunPortraitCarouselAsync(groups, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -573,7 +574,7 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private async Task RunPortraitCarouselAsync(IReadOnlyList<string> urls, CancellationToken cancellationToken)
+    private async Task RunPortraitCarouselAsync(List<List<string>> groups, CancellationToken cancellationToken)
     {
         try
         {
@@ -582,18 +583,22 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
                 await Task.Delay(PortraitCycleInterval, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
 
+                string? next = null;
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     if (cancellationToken.IsCancellationRequested ||
                         !IsPortraitModeEnabled ||
-                        !ReferenceEquals(urls, _portraitUrls))
+                        !ReferenceEquals(groups, _portraitGroups))
                         return;
 
-                    _portraitIndex = (_portraitIndex + 1) % urls.Count;
+                    // 多歌手交替策略：每个歌手轮流出一张，避免单歌手写真连续霸屏。
+                    next = GetNextAlternatingPortraitUrl();
                 });
-                cancellationToken.ThrowIfCancellationRequested();
+                if (next == null)
+                    continue;
 
-                await FadeToNextPortraitAsync(urls[_portraitIndex], urls, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                await FadeToNextPortraitAsync(next, groups, cancellationToken);
             }
         }
         catch (OperationCanceledException)
@@ -601,19 +606,55 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void ApplyPortraitUrls(IReadOnlyList<string> urls)
+    /// <summary>
+    ///     交替轮播取图：从当前歌手开始轮转，每个歌手按各自索引取一张；
+    ///     若取到的图与当前显示图相同（如首张已被 ApplyPortraitUrls 展示），则继续取下一张。
+    /// </summary>
+    private string? GetNextAlternatingPortraitUrl()
     {
-        _portraitUrls = urls;
-        _portraitIndex = 0;
+        if (_portraitGroups.Count == 0)
+            return null;
+
+        var current = _isPortraitLayerAActive ? PortraitBackgroundA : PortraitBackgroundB;
+
+        for (var attempt = 0; attempt <= _portraitGroups.Count; attempt++)
+        {
+            for (var i = 0; i < _portraitGroups.Count; i++)
+            {
+                var groupIndex = (_currentPortraitGroup + i) % _portraitGroups.Count;
+                var images = _portraitGroups[groupIndex];
+                if (images.Count == 0)
+                    continue;
+
+                var url = images[_portraitGroupIndices[groupIndex]];
+                _portraitGroupIndices[groupIndex] = (_portraitGroupIndices[groupIndex] + 1) % images.Count;
+                _currentPortraitGroup = (groupIndex + 1) % _portraitGroups.Count;
+
+                if (!string.Equals(url, current, StringComparison.Ordinal))
+                    return url;
+            }
+        }
+
+        return null;
+    }
+
+    private void ApplyPortraitUrls(List<List<string>> groups)
+    {
+        _portraitGroups = groups;
+        _portraitGroupIndices = new int[groups.Count];
+        _currentPortraitGroup = 0;
         _isPortraitLayerAActive = true;
 
-        if (urls.Count == 0)
+        var flat = new List<string>();
+        foreach (var group in groups)
+            flat.AddRange(group);
+        if (flat.Count == 0)
         {
             ClearPortraitLayers();
             return;
         }
 
-        PortraitBackgroundA = urls[0];
+        PortraitBackgroundA = flat[0];
         PortraitBackgroundB = null;
         PortraitLayerAOpacity = 1;
         PortraitLayerBOpacity = 0;
@@ -621,12 +662,12 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 
     private async Task FadeToNextPortraitAsync(
         string url,
-        IReadOnlyList<string> urls,
+        List<List<string>> groups,
         CancellationToken cancellationToken)
     {
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            if (!CanApplyPortraitTransition(urls, cancellationToken))
+            if (!CanApplyPortraitTransition(groups, cancellationToken))
                 return;
 
             PrepareNextPortraitLayer(url);
@@ -636,7 +677,7 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            if (!CanApplyPortraitTransition(urls, cancellationToken))
+            if (!CanApplyPortraitTransition(groups, cancellationToken))
                 return;
 
             CommitNextPortraitLayer();
@@ -645,11 +686,11 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         await Task.Delay(PortraitFadeDuration, cancellationToken);
     }
 
-    private bool CanApplyPortraitTransition(IReadOnlyList<string> urls, CancellationToken cancellationToken)
+    private bool CanApplyPortraitTransition(List<List<string>> groups, CancellationToken cancellationToken)
     {
         return !cancellationToken.IsCancellationRequested &&
                IsPortraitModeEnabled &&
-               ReferenceEquals(urls, _portraitUrls);
+               ReferenceEquals(groups, _portraitGroups);
     }
 
     private void PrepareNextPortraitLayer(string url)
@@ -692,8 +733,9 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
 
     private void ClearPortraitLayers()
     {
-        _portraitUrls = [];
-        _portraitIndex = 0;
+        _portraitGroups = [];
+        _portraitGroupIndices = [];
+        _currentPortraitGroup = 0;
         _isPortraitLayerAActive = true;
         PortraitBackgroundA = null;
         PortraitBackgroundB = null;
@@ -783,31 +825,82 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
         TranslationFontSize = Math.Max(14, Math.Round(clamped * 0.62, 1));
     }
 
-    private static IReadOnlyList<string> ExtractPortraitUrls(AudioImageResponse? response)
+    /// <summary>
+    ///     按歌手 ID 获取写真（酷狗开放平台 /kmr/v1/author/extend），支持多歌手合并与去重。
+    /// </summary>
+    private async Task<List<List<string>>> FetchPortraitUrlsAsync(
+        SongItem song,
+        CancellationToken cancellationToken = default)
     {
-        if (response == null)
-            return [];
-
-        var authors = response.Authors.AsValueEnumerable().ToList();
-        if (authors.Count == 0)
-            return [];
-
-        var urls = new List<string>();
-        foreach (var author in authors)
+        var authorIds = new List<long>();
+        foreach (var singer in song.Singers)
         {
-            foreach (var pair in author.Images)
-                urls.AddRange(pair.Value.AsValueEnumerable().Select(x => NormalizePortraitUrl(x.SizablePortrait)).ToArray());
+            if (singer.Id > 0 && !authorIds.Contains(singer.Id))
+                authorIds.Add(singer.Id);
+        }
+        if (authorIds.Count == 0)
+            return [];
+
+        var tasks = new List<Task<List<string>>>(authorIds.Count);
+        foreach (var authorId in authorIds)
+            tasks.Add(FetchAuthorPortraitUrlsAsync(authorId, cancellationToken));
+
+        var results = await Task.WhenAll(tasks);
+
+        // 每个歌手一组，组内去重；跳过没有写真的歌手，保证组序与歌手顺序一致。
+        var groups = new List<List<string>>();
+        foreach (var group in results)
+        {
+            var distinct = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var url in group)
+            {
+                if (!string.IsNullOrWhiteSpace(url) && seen.Add(url))
+                    distinct.Add(url);
+            }
+
+            if (distinct.Count > 0)
+                groups.Add(distinct);
         }
 
-        return urls
-            .AsValueEnumerable().Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        return groups;
     }
 
-    private static string NormalizePortraitUrl(string? url)
+    private async Task<List<string>> FetchAuthorPortraitUrlsAsync(long authorId, CancellationToken cancellationToken)
     {
-        return string.IsNullOrWhiteSpace(url) ? string.Empty : url.Replace("{size}", "800");
+        var urls = new List<string>();
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var items = await _artistClient.GetExtendImagesAsync(authorId.ToString());
+            if (items == null)
+                return urls;
+
+            foreach (var item in items)
+            {
+                foreach (var image in item.Images)
+                {
+                    if (string.IsNullOrWhiteSpace(image.File))
+                        continue;
+
+                    // singerimg.kugou.com 的 http 地址会被 .NET HttpClient 403 拒绝，统一升级为 https。
+                    var file = image.File.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        ? "https://" + image.File[7..]
+                        : image.File;
+                    urls.Add(file);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "获取歌手写真失败，authorId={AuthorId}", authorId);
+        }
+
+        return urls;
     }
 
     private static Color ParseColorOrDefault(string? colorText, Color fallback)

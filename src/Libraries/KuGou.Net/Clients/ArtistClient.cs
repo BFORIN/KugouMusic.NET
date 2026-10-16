@@ -72,6 +72,26 @@ public class ArtistClient(RawArtistApi rawApi, RawSearchApi rawSearchApi, KgSess
         return json.Deserialize(AppJsonContext.Default.ArtistAlbumResponse);
     }
 
+    /// <summary>
+    ///     获取歌手写真（对应 /kmr/v1/author/extend）。
+    /// </summary>
+    /// <param name="authorId">歌手 ID。</param>
+    /// <returns>写真列表，无写真或请求失败时返回 null。</returns>
+    public async Task<List<AuthorExtendItem>?> GetExtendImagesAsync(string authorId)
+    {
+        var json = await rawApi.GetExtendImagesAsync(authorId);
+        if (json.ValueKind != JsonValueKind.Object)
+            return null;
+
+        if (!json.TryGetProperty("status", out var status) || status.GetInt32() != 1)
+            return null;
+
+        if (!json.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+            return null;
+
+        return data.Deserialize(AppJsonContext.Default.ListAuthorExtendItem);
+    }
+
     public Task<JsonElement> GetDetailRawAsync(string id)
     {
         return rawApi.GetDetailAsync(id);

@@ -176,6 +176,28 @@ public class RawArtistApi(IKgTransport transport, KgSessionManager sessionManage
         });
     }
 
+    /// <summary>
+    ///     获取歌手写真（酷狗开放平台 /kmr/v1/author/extend，无签名公开接口）。
+    /// </summary>
+    /// <param name="authorId">歌手 ID。</param>
+    public Task<JsonElement> GetExtendImagesAsync(string authorId)
+    {
+        return transport.SendAsync(new KgRequest
+        {
+            Method = HttpMethod.Get,
+            BaseUrl = "https://openapicdnretry.kugou.com",
+            Path = "/kmr/v1/author/extend",
+            Params = new Dictionary<string, string>
+            {
+                ["fields_pack"] = "allimages",
+                ["authorimg_type"] = "2,3",
+                ["entity_id"] = authorId
+            },
+            ClearDefaultParams = true,
+            SignatureType = SignatureType.None
+        });
+    }
+
     public Task<JsonElement> GetAudiosAsync(string id, int page = 1, int pageSize = 30, string sort = "new")
     {
         var clientTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
