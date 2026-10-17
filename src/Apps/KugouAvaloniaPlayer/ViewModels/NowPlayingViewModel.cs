@@ -353,23 +353,6 @@ public partial class NowPlayingViewModel : ViewModelBase, IDisposable
     }
 
     [RelayCommand]
-    private void CycleThemePreset()
-    {
-        var presets = ThemePresets;
-        var currentIndex = 0;
-        for (var index = 0; index < presets.Count; index++)
-        {
-            if (presets[index].Preset != SelectedThemePreset)
-                continue;
-
-            currentIndex = index;
-            break;
-        }
-
-        SelectedThemePreset = presets[(currentIndex + 1) % presets.Count].Preset;
-    }
-
-    [RelayCommand]
     private void TogglePortraitMode()
     {
         IsPortraitModeEnabled = !IsPortraitModeEnabled;

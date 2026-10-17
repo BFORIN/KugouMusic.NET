@@ -1,0 +1,97 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:suki="https://github.com/kikipoulet/SukiUI"
+             xmlns:controls="using:KugouAvaloniaPlayer.Controls"
+             x:Class="KugouAvaloniaPlayer.Controls.NowPlayingThemePicker"
+             Width="96">
+    <UserControl.Transitions>
+        <Transitions>
+            <DoubleTransition Property="Width" Duration="0:0:0.28" Easing="CubicEaseOut" />
+        </Transitions>
+    </UserControl.Transitions>
+    <UserControl.Styles>
+        <Style Selector="Button.ThemePickerButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#E8FFFFFF" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}" CornerRadius="10"
+                            Padding="{TemplateBinding Padding}">
+                        <Border.Transitions>
+                            <Transitions>
+                                <BrushTransition Property="Background" Duration="0:0:0.16" />
+                            </Transitions>
+                        </Border.Transitions>
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          VerticalAlignment="Center"
+                                          HorizontalContentAlignment="Stretch" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </Style>
+        <Style Selector="Button.ThemePickerButton.selected">
+            <Setter Property="Background" Value="#24E5B96B" />
+            <Setter Property="Foreground" Value="#FFE5B96B" />
+        </Style>
+        <Style Selector="Button.ThemePickerButton:pointerover, Button.ThemePickerButton:focus-visible">
+            <Setter Property="Background" Value="#20FFFFFF" />
+        </Style>
+        <Style Selector="Button.ThemePickerButton:pressed">
+            <Setter Property="Background" Value="#36E5B96B" />
+        </Style>
+        <Style Selector="Border#PickerBody">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="translateY(-8px)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Height" Duration="0:0:0.28" Easing="CubicEaseOut" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.28" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="controls|NowPlayingThemePicker:expanded Border#PickerBody">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="RenderTransform" Value="translateY(0px)" />
+        </Style>
+        <Style Selector="PathIcon#Chevron">
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.25" Easing="CubicEaseOut" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="controls|NowPlayingThemePicker:expanded PathIcon#Chevron">
+            <Setter Property="RenderTransform" Value="rotate(180deg)" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="#F0181922" BorderBrush="#55E5B96B" BorderThickness="1"
+            CornerRadius="18" ClipToBounds="True" BoxShadow="0 8 28 0 #40000000">
+        <StackPanel>
+            <Button x:Name="Trigger" Classes="ThemePickerButton" Height="34"
+                    Click="OnTriggerClick" AutomationProperties.Name="选择播放主题">
+                <Grid ColumnDefinitions="14,*,10">
+                    <Svg Path="/Assets/gear-svgrepo-com.svg"
+                         Css="path { stroke: #E5B96B; fill: none; }" Width="14" Height="14" />
+                    <TextBlock x:Name="CurrentName" Grid.Column="1" Margin="9,0"
+                               FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <PathIcon x:Name="Chevron" Grid.Column="2" Data="{x:Static suki:Icons.ChevronDown}"
+                              Width="9" Height="9" Foreground="#E5B96B" RenderTransformOrigin="50%,50%" />
+                </Grid>
+            </Button>
+            <Border x:Name="PickerBody" Height="0" ClipToBounds="True" IsEnabled="False">
+                <StackPanel Margin="6,0,6,8" VerticalAlignment="Top">
+                    <Border Height="1" Background="#18FFFFFF" Margin="8,0,8,0" />
+                    <TextBlock Text="播放主题" FontSize="10" Foreground="#80FFFFFF" Margin="12,8,0,6" />
+                    <StackPanel x:Name="Options" Spacing="2" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

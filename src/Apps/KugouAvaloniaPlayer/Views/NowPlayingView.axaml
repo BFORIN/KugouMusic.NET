@@ -155,29 +155,6 @@
                             <PathIcon Data="{x:Static suki:Icons.ChevronDown}" Foreground="White" Width="15" Height="15" />
                         </Border>
                     </Button>
-
-                    <Button Cursor="Hand"
-                            Command="{Binding CycleThemePresetCommand}"
-                            Classes="Basic">
-                        <Border Background="#24101822"
-                                BorderBrush="#35E5B96B"
-                                BorderThickness="1"
-                                CornerRadius="20"
-                                Padding="13,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Svg Path="/Assets/gear-svgrepo-com.svg"
-                                     Css="path { stroke: #E5B96B; fill: none; }"
-                                     Width="14"
-                                     Height="14"
-                                     Opacity="0.92" />
-                                <TextBlock Text="{Binding CurrentThemePresetName}"
-                                           FontSize="11"
-                                           FontWeight="SemiBold"
-                                           Foreground="White"
-                                           VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Border>
-                    </Button>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1"
@@ -221,7 +198,12 @@
                 </StackPanel>
             </Grid>
 
-
+            <controls:NowPlayingThemePicker Grid.RowSpan="2"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Top"
+                                            Margin="57,10,0,0"
+                                            IsEnabled="{Binding IsOpen}"
+                                            SelectedPreset="{Binding SelectedThemePreset, Mode=TwoWay}" />
         </Grid>
     </Grid>
 </UserControl>
