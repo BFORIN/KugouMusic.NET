@@ -227,7 +227,7 @@ xattr -dr com.apple.quarantine /Applications/KugouAvaloniaPlayer.app
 
 ## 本地开发
 
-项目同时支持 `net10.0` 和 `net11.0`，仅 .NET 11 启用运行时异步；CI 使用 .NET 11 SDK，发布产物以 .NET 10 为目标。构建全部目标需要 .NET 11 SDK，运行时使用 `-f` 选择框架。Windows 播放器对应使用 `net10.0-windows10.0.19041.0` 或 `net11.0-windows10.0.19041.0`。
+项目仅支持 .NET 10，本地开发和 CI 均使用 .NET 10 SDK。仓库通过 `global.json` 选择已安装的稳定版 .NET 10 SDK。Windows 播放器目标为 `net10.0-windows10.0.19041.0`，其余项目及非 Windows 播放器目标为 `net10.0`。
 
 ```bash
 git clone https://github.com/Linsxyx/KugouMusic.NET.git
@@ -236,19 +236,19 @@ cd KugouMusic.NET
 dotnet restore KugouMusic.NET.slnx
 dotnet build KugouMusic.NET.slnx
 
-dotnet run -f net11.0 --project src/Apps/KugouAvaloniaPlayer/KugouAvaloniaPlayer.csproj
+dotnet run --project src/Apps/KugouAvaloniaPlayer/KugouAvaloniaPlayer.csproj
 ```
 
 如需运行终端播放器：
 
 ```bash
-dotnet run -f net11.0 --project src/Apps/KgTest/KgTest.csproj
+dotnet run --project src/Apps/KgTest/KgTest.csproj
 ```
 
 如需运行 Web API：
 
 ```bash
-dotnet run -f net11.0 --project src/Apps/KgWebApi.Net/KgWebApi.Net.csproj
+dotnet run --project src/Apps/KgWebApi.Net/KgWebApi.Net.csproj
 ```
 
 Web API 文档（开发环境）：`http://localhost:5058/scalar/v1`

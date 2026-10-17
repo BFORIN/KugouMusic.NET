@@ -1,9 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net10.0-windows10.0.19041.0;net11.0-windows10.0.19041.0</TargetFrameworks>
-        <Features Condition="'$(TargetFramework)' == 'net11.0' Or '$(TargetFramework)' == 'net11.0-windows10.0.19041.0'">$(Features);runtime-async=on</Features>
-        <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net10.0;net11.0</TargetFrameworks>
+        <TargetFramework Condition="$([MSBuild]::IsOSPlatform('Windows'))">net10.0-windows10.0.19041.0</TargetFramework>
+        <TargetFramework Condition="!$([MSBuild]::IsOSPlatform('Windows'))">net10.0</TargetFramework>
         <AssemblyName>KugouAvaloniaPlayer</AssemblyName>
         <PackageId>KugouAvaloniaPlayer</PackageId>
         <Nullable>enable</Nullable>
@@ -58,7 +57,7 @@
         <PackageReference Include="Microsoft.Data.Sqlite" Condition="'$(UseSystemSqlite)' != 'true'" />
         <PackageReference Include="Microsoft.Data.Sqlite.Core" Condition="'$(UseSystemSqlite)' == 'true'" />
         <PackageReference Include="SQLitePCLRaw.bundle_sqlite3" Condition="'$(UseSystemSqlite)' == 'true'" />
-        <!-- bundle_sqlite3 ends at 2.1.11; match the provider to Sqlite.Core's SQLitePCLRaw 3.x. -->
+        <!-- Keep the system SQLite provider explicitly versioned. -->
         <PackageReference Include="SQLitePCLRaw.provider.sqlite3" Condition="'$(UseSystemSqlite)' == 'true'" />
         <PackageReference Include="Pure.DI">
           <PrivateAssets>all</PrivateAssets>
