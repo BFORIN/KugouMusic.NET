@@ -127,6 +127,30 @@
             <Setter Property="Css" Value="* { color: #D6A91F; fill: #D6A91F; stroke: #D6A91F; }" />
         </Style>
 
+        <!-- Tempera 主题色彩适配 (午夜墨染) -->
+        <Style Selector="controls|FloatingPlayerBar.Tempera Border#BarBorder">
+            <Setter Property="Background" Value="#E509090B" />
+            <Setter Property="BorderBrush" Value="#33F4F4F5" />
+        </Style>
+        <Style Selector="controls|FloatingPlayerBar.Tempera TextBlock.BarTime">
+            <Setter Property="Foreground" Value="#C8F4F4F5" />
+        </Style>
+        <Style Selector="controls|FloatingPlayerBar.Tempera TextBlock.BarTitle">
+            <Setter Property="Foreground" Value="#F4F4F5" />
+        </Style>
+        <Style Selector="controls|FloatingPlayerBar.Tempera TextBlock.BarSinger">
+            <Setter Property="Foreground" Value="#A1A1AA" />
+        </Style>
+        <Style Selector="controls|FloatingPlayerBar.Tempera Button.BarPlayBtn">
+            <Setter Property="Background" Value="#25F4F4F5" />
+        </Style>
+        <Style Selector="controls|FloatingPlayerBar.Tempera Button.BarPlayBtn:pointerover">
+            <Setter Property="Background" Value="#38F4F4F5" />
+        </Style>
+        <Style Selector="controls|FloatingPlayerBar.Tempera Svg.BarIcon">
+            <Setter Property="Css" Value="* { color: #F4F4F5; fill: #F4F4F5; stroke: #F4F4F5; }" />
+        </Style>
+
         <!-- Lumiere 主题色彩适配 (银月蓝白色) -->
         <Style Selector="controls|FloatingPlayerBar.Lumiere Border#BarBorder">
             <Setter Property="Background" Value="#E5121928" />

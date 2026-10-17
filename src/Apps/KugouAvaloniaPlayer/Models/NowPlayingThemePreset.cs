@@ -9,7 +9,8 @@ public enum NowPlayingThemePreset
     Pendolo,
     Fume,
     Sonnet,
-    Lumiere
+    Lumiere,
+    Tempera
 }
 
 public sealed record NowPlayingThemePresetOption(
@@ -20,6 +21,9 @@ public static class NowPlayingThemePresetRegistry
 {
     public static IReadOnlyList<NowPlayingThemePresetOption> Presets { get; } =
     [
+        new(
+            NowPlayingThemePreset.Tempera,
+            "凝彩"),
         new(
             NowPlayingThemePreset.Lumiere,
             "绘光"),
@@ -43,7 +47,8 @@ public static class NowPlayingThemePresetRegistry
             NowPlayingThemePreset.Pendolo or
             NowPlayingThemePreset.Fume or
             NowPlayingThemePreset.Sonnet or
-            NowPlayingThemePreset.Lumiere
+            NowPlayingThemePreset.Lumiere or
+            NowPlayingThemePreset.Tempera
             ? preset
             : NowPlayingThemePreset.Standard;
     }
