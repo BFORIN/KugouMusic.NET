@@ -73,62 +73,45 @@
                    VerticalAlignment="Center"
                    IsVisible="{Binding !Player.RenderLyricLines.Count}" />
 
-        <!-- Fume keeps the article itself non-interactive; translation stays in a quiet subtitle rail. -->
-        <Border Classes="FumeGlass"
-                Padding="18,10"
-                Margin="0,0,0,82"
-                MaxWidth="680"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                IsVisible="{Binding IsTranslationVisible}">
-            <TextBlock Text="{Binding Player.CurrentLyricLine.Translation}"
-                       FontSize="14"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap"
-                       Foreground="#D0D6A91F" />
-        </Border>
+        <!-- Fume keeps the article itself non-interactive; translation stays in a quiet subtitle rail.
+             Auto rows keep the subtitle 10 px above the bar throughout its height animation. -->
+        <Grid RowDefinitions="Auto,Auto"
+              Margin="0,0,0,26"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Bottom">
+            <Grid Margin="0,0,0,10">
+                <Border Classes="FumeGlass"
+                        Padding="18,10"
+                        MaxWidth="680"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        IsVisible="{Binding IsTranslationVisible}">
+                    <TextBlock Text="{Binding Player.CurrentLyricLine.Translation}"
+                               FontSize="14"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="#D0D6A91F" />
+                </Border>
 
-        <Border Classes="FumeGlass"
-                Padding="18,10"
-                Margin="0,0,0,82"
-                MaxWidth="680"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom"
-                IsVisible="{Binding IsRomanizationVisible}">
-            <TextBlock Text="{Binding Player.CurrentLyricLine.Romanization}"
-                       FontSize="14"
-                       TextAlignment="Center"
-                       TextWrapping="Wrap"
-                       Foreground="#D0D6A91F" />
-        </Border>
-
-        <Border Classes="FumeGlass"
-                Padding="18,10"
-                Margin="0,0,0,26"
-                Width="390"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                <TextBlock Text="{Binding Player.CurrentPositionSeconds, Converter={StaticResource SecondsToTimeConverter}}"
-                           FontSize="11"
-                           FontFamily="Monospace"
-                           Foreground="#C8D6A91F"
-                           VerticalAlignment="Center" />
-                <Slider Grid.Column="1"
-                        Minimum="0"
-                        Maximum="{Binding Player.TotalDurationSeconds}"
-                        Value="{Binding Player.CurrentPositionSeconds}"
-                        IsSnapToTickEnabled="False"
-                        Classes="Player PlayerDark PlayerCompact"
-                        VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2"
-                           Text="{Binding Player.TotalDurationSeconds, Converter={StaticResource SecondsToTimeConverter}}"
-                           FontSize="11"
-                           FontFamily="Monospace"
-                           Foreground="#C8D6A91F"
-                           VerticalAlignment="Center" />
+                <Border Classes="FumeGlass"
+                        Padding="18,10"
+                        MaxWidth="680"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Bottom"
+                        IsVisible="{Binding IsRomanizationVisible}">
+                    <TextBlock Text="{Binding Player.CurrentLyricLine.Romanization}"
+                               FontSize="14"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Foreground="#D0D6A91F" />
+                </Border>
             </Grid>
-        </Border>
+
+            <controls:FloatingPlayerBar Grid.Row="1"
+                                        Classes="Fume"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Bottom" />
+        </Grid>
 
         <Button Classes="Basic"
                 Cursor="Hand"

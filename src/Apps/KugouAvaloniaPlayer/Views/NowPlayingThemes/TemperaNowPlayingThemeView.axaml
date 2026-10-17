@@ -1,0 +1,136 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:KugouAvaloniaPlayer.Controls"
+             xmlns:effects="using:AvaloniaSilkEffects"
+             xmlns:vm="using:KugouAvaloniaPlayer.ViewModels"
+             x:Class="KugouAvaloniaPlayer.Views.NowPlayingThemes.TemperaNowPlayingThemeView"
+             x:DataType="vm:NowPlayingViewModel"
+             ClipToBounds="True">
+    <UserControl.Styles>
+        <Style Selector="Border.TemperaGlass">
+            <Setter Property="Background" Value="#E509090B" />
+            <Setter Property="BorderBrush" Value="#28FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="20" />
+            <Setter Property="BoxShadow" Value="0 18 50 0 #66000000" />
+        </Style>
+        <Style Selector="TextBlock.TemperaSettingsLabel">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#DDE8ECF3" />
+        </Style>
+        <Style Selector="Button.TemperaSegment">
+            <Setter Property="Background" Value="#14FFFFFF" />
+            <Setter Property="Foreground" Value="#DDE8ECF3" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="10,7" />
+        </Style>
+        <Style Selector="Button.TemperaSegment:pointerover">
+            <Setter Property="Background" Value="#25FFFFFF" />
+        </Style>
+    </UserControl.Styles>
+    <Grid x:Name="EffectViewport" ClipToBounds="True">
+        <effects:SilkEffectControl x:Name="EffectSurface"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   ClipToBounds="True"
+                                   ClearColor="#00000000"
+                                   RenderMode="Continuous"
+                                   TargetFrameRate="60" />
+
+        <Border x:Name="DiagnosticOverlay"
+                Margin="40"
+                Padding="18,14"
+                MaxWidth="440"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="#D9141720"
+                BorderBrush="#55FFFFFF"
+                BorderThickness="1"
+                CornerRadius="12"
+                IsHitTestVisible="False">
+            <TextBlock x:Name="DiagnosticText"
+                       Text="正在初始化"
+                       Foreground="White"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <controls:FloatingPlayerBar Classes="Tempera"
+                                    Margin="0,0,0,26"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom" />
+
+        <Button Classes="Basic"
+                Cursor="Hand"
+                Width="48"
+                Height="48"
+                Margin="0,0,28,26"
+                Padding="0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                ToolTip.Tip="凝彩 背景">
+            <Button.Flyout>
+                <Flyout Placement="TopEdgeAlignedRight">
+                    <Border Classes="TemperaGlass"
+                            Width="300"
+                            Padding="18">
+                        <StackPanel Spacing="14">
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="凝彩 背景"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Foreground="#FFE8ECF3" />
+                                <TextBlock Text="选择动态材质或原来的模糊封面"
+                                           FontSize="11"
+                                           Foreground="#8FE8ECF3" />
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="TemperaSettingsLabel" Text="背景材质" />
+                                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                    <Button Classes="TemperaSegment"
+                                            Command="{Binding UseLatentMaterialBackgroundCommand}"
+                                            Cursor="Hand">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Border Width="6"
+                                                    Height="6"
+                                                    CornerRadius="3"
+                                                    Background="#FFF4F4F5"
+                                                    IsVisible="{Binding IsLatentMaterialBackground}" />
+                                            <TextBlock Text="动态材质" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1"
+                                            Classes="TemperaSegment"
+                                            Command="{Binding UseBlurredCoverBackgroundCommand}"
+                                            Cursor="Hand">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <Border Width="6"
+                                                    Height="6"
+                                                    CornerRadius="3"
+                                                    Background="#FFF4F4F5"
+                                                    IsVisible="{Binding IsBlurredCoverBackground}" />
+                                            <TextBlock Text="模糊封面" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </Flyout>
+            </Button.Flyout>
+
+            <Border Width="48"
+                    Height="48"
+                    CornerRadius="24"
+                    Background="#E509090B"
+                    BorderBrush="#35FFFFFF"
+                    BorderThickness="1">
+                <TextBlock Text="⚙"
+                           FontSize="18"
+                           Foreground="#E8ECF3"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+        </Button>
+    </Grid>
+</UserControl>
