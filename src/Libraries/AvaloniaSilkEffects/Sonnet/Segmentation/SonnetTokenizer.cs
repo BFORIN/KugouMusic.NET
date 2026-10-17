@@ -41,9 +41,24 @@ internal static class SonnetTokenizer
         return japanese > chinese ? SonnetLanguage.Japanese : SonnetLanguage.Chinese;
     }
 
-    public static List<SonnetToken> Tokenize(SonnetLine line, SonnetTextElement[] elements, SonnetLanguage songLanguage)
+    public static SonnetLanguage SongLanguage(IEnumerable<string> lines)
     {
-        var language = line.LanguageHint != SonnetLanguage.Auto ? line.LanguageHint
+        var japanese = 0;
+        var chinese = 0;
+        foreach (var line in lines)
+        {
+            if (line.EnumerateRunes().Any(IsKana)) japanese++;
+            else if (line.EnumerateRunes().Any(IsHan)) chinese++;
+        }
+        return japanese > chinese ? SonnetLanguage.Japanese : SonnetLanguage.Chinese;
+    }
+
+    public static List<SonnetToken> Tokenize(SonnetLine line, SonnetTextElement[] elements, SonnetLanguage songLanguage) =>
+        Tokenize(line.FullText, elements, songLanguage, line.LanguageHint);
+
+    public static List<SonnetToken> Tokenize(string fullText, SonnetTextElement[] elements, SonnetLanguage songLanguage, SonnetLanguage languageHint = SonnetLanguage.Auto)
+    {
+        var language = languageHint != SonnetLanguage.Auto ? languageHint
             : elements.Any(item => IsKana(FirstRune(item.Text))) ? SonnetLanguage.Japanese : songLanguage;
         var japanese = language == SonnetLanguage.Japanese
             ? SonnetJapaneseTokenizer.Instance.Boundaries(elements) : null;
@@ -54,7 +69,7 @@ internal static class SonnetTokenizer
             var start = index++;
             if (IsKeycap(elements[start].Text))
             {
-                output.Add(Token(line.FullText, elements, start, index, language, SonnetLexicalKind.Symbol, SonnetLexicalSource.Scanner));
+                output.Add(Token(fullText, elements, start, index, language, SonnetLexicalKind.Symbol, SonnetLexicalSource.Scanner));
                 continue;
             }
             if (IsCjk(rune))
@@ -66,21 +81,21 @@ internal static class SonnetTokenizer
                     for (var finish = start + 1; finish <= index; finish++)
                         if (finish == index || japanese[finish])
                         {
-                            output.Add(Token(line.FullText, elements, tokenStart, finish, SonnetLanguage.Japanese,
+                            output.Add(Token(fullText, elements, tokenStart, finish, SonnetLanguage.Japanese,
                                 SonnetLexicalKind.Other, SonnetLexicalSource.JapaneseModel));
                             tokenStart = finish;
                         }
                 }
                 else if (language == SonnetLanguage.English)
-                    output.Add(Token(line.FullText, elements, start, index, language,
+                    output.Add(Token(fullText, elements, start, index, language,
                         SonnetLexicalKind.Other, SonnetLexicalSource.Scanner));
-                else SonnetChineseTokenizer.Append(line.FullText, elements, start, index, output);
+                else SonnetChineseTokenizer.Append(fullText, elements, start, index, output);
                 continue;
             }
             if (Rune.IsWhiteSpace(rune))
             {
                 while (index < elements.Length && Rune.IsWhiteSpace(FirstRune(elements[index].Text))) index++;
-                output.Add(Token(line.FullText, elements, start, index, language, SonnetLexicalKind.Whitespace, SonnetLexicalSource.Scanner));
+                output.Add(Token(fullText, elements, start, index, language, SonnetLexicalKind.Whitespace, SonnetLexicalSource.Scanner));
                 continue;
             }
             if (Rune.IsLetterOrDigit(rune))
@@ -94,14 +109,14 @@ internal static class SonnetTokenizer
                     { index += 2; continue; }
                     break;
                 }
-                output.Add(Token(line.FullText, elements, start, index, SonnetLanguage.English, SonnetLexicalKind.Other, SonnetLexicalSource.Scanner));
+                output.Add(Token(fullText, elements, start, index, SonnetLanguage.English, SonnetLexicalKind.Other, SonnetLexicalSource.Scanner));
                 continue;
             }
             var kind = Rune.GetUnicodeCategory(rune) is UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
                 or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation or UnicodeCategory.InitialQuotePunctuation
                 or UnicodeCategory.FinalQuotePunctuation or UnicodeCategory.OtherPunctuation
                 ? SonnetLexicalKind.Punctuation : SonnetLexicalKind.Symbol;
-            output.Add(Token(line.FullText, elements, start, index, language, kind, SonnetLexicalSource.Scanner));
+            output.Add(Token(fullText, elements, start, index, language, kind, SonnetLexicalSource.Scanner));
         }
         return output;
     }
@@ -117,13 +132,11 @@ internal static class SonnetTokenizer
         return new SonnetToken(start, end, new SonnetLexicalWord(word, from, to, language, kind, source));
     }
 
-    public static Rune FirstRune(string text) => Rune.TryGetRuneAt(text, 0, out var rune) ? rune : Rune.ReplacementChar;
-    public static bool IsHan(Rune rune) => rune.Value is >= 0x3400 and <= 0x4DBF or >= 0x4E00 and <= 0x9FFF
-        or >= 0xF900 and <= 0xFAFF or >= 0x20000 and <= 0x323AF;
-    public static bool IsKana(Rune rune) => rune.Value is >= 0x3041 and <= 0x3096 or >= 0x309D and <= 0x309F
-        or >= 0x30A1 and <= 0x30FA or >= 0x30FC and <= 0x30FF or >= 0x31F0 and <= 0x31FF or >= 0xFF66 and <= 0xFF9F;
-    private static bool IsCjk(Rune rune) => IsHan(rune) || IsKana(rune) || rune.Value is 0x3005 or 0x3006 or 0x303B;
-    private static bool IsLatinWordElement(Rune rune) => Rune.IsLetterOrDigit(rune) && !IsCjk(rune);
+    public static Rune FirstRune(string text) => EffectTextMetrics.FirstRune(text);
+    public static bool IsHan(Rune rune) => EffectTextMetrics.IsHan(rune);
+    public static bool IsKana(Rune rune) => EffectTextMetrics.IsKana(rune);
+    public static bool IsCjk(Rune rune) => EffectTextMetrics.IsCjk(rune);
+    public static bool IsLatinWordElement(Rune rune) => EffectTextMetrics.IsLatinWordElement(rune);
     private static bool IsKeycap(string text) => text.Contains('\u20E3');
     private static bool IsJoiner(string text, Rune before, Rune after) =>
         IsLatinWordElement(before) && IsLatinWordElement(after) &&

@@ -41,8 +41,7 @@ internal sealed partial class LumiereGlyphLine : IDisposable
         Text = text;
         FontPx = fontPx;
         var graphemes = LumiereReveal.Graphemes(text);
-        using var typeface = EffectTextureCache.ResolveTypeface(fontFamily,
-            new SKFontStyle(Math.Clamp(weight, 100, 900), (int)SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), text);
+        var typeface = EffectTextMetrics.GetTypeface(fontFamily, weight, text);
         using var font = new SKFont(typeface, fontPx) { Edging = SKFontEdging.Antialias, Subpixel = true };
         var spacing = letterSpacing * fontPx;
 

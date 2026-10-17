@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AvaloniaSilkEffects;
 
 namespace KugouAvaloniaPlayer.Controls;
 
@@ -85,9 +86,7 @@ internal static class FumeBackgroundScene
 
     private static double Sample(string seed, string property, double min = 0, double max = 1)
     {
-        uint hash = 2166136261;
-        foreach (var c in $"{seed}:{property}")
-            hash = unchecked((hash ^ c) * 16777619);
+        var hash = EffectMath.Hash($"{seed}:{property}");
         return min + (max - min) * (hash % 10000 / 10000d);
     }
 }

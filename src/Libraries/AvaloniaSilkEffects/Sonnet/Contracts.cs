@@ -1,3 +1,5 @@
+global using SonnetAnimationIntensity = AvaloniaSilkEffects.EffectAnimationIntensity;
+
 using System.Numerics;
 
 namespace AvaloniaSilkEffects.Sonnet;
@@ -39,10 +41,9 @@ public sealed record SonnetTheme(
     IReadOnlyList<SonnetWordColor>? WordColors = null,
     IReadOnlyList<string>? LyricsIcons = null);
 
-public enum SonnetAnimationIntensity { Calm, Normal, Chaotic }
 public enum SonnetFontStyle { Sans, Serif, Mono }
 public enum SonnetOuterFrameMode { None, Frame, Full }
-public sealed record SonnetWordColor(string Word, EffectColor Color);
+public sealed record SonnetWordColor(string Word, EffectColor Color) : EffectWordColor(Word, Color);
 
 public sealed class SonnetTuning
 {

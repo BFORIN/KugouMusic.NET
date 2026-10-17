@@ -67,7 +67,7 @@ internal sealed class LumiereMotes
     private static double Wrap(double value, double min, double max)
     {
         var span = max - min;
-        return min + ((value - min) % span + span) % span;
+        return min + EffectMath.Mod(value - min, span);
     }
 
     /// <param name="root">Stage logical pixels → target pixels.</param>

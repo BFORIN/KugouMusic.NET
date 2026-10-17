@@ -9,13 +9,9 @@ public static class TemperaCamera
     private const double BreathMaxScale = 0.002;
     private const double BreathMaxRotation = 0.0015;
 
-    private static double EaseInOutCubic(double value)
-    {
-        var t = TemperaEasing.Clamp01(value);
-        return t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2;
-    }
+    private static double EaseInOutCubic(double value) => EffectEasing.EaseInOutCubic(value);
 
-    private static double Lerp(double from, double to, double amount) => from + (to - from) * amount;
+    private static double Lerp(double from, double to, double amount) => EffectMath.Lerp(from, to, amount);
 
     /// <summary>Progress may exceed 1 slightly in gaps so the frame keeps drifting instead of freezing.</summary>
     public static TemperaCameraFrame Frame(TemperaShot shot, double progress)
@@ -32,17 +28,13 @@ public static class TemperaCamera
 
     public static TemperaCameraFrame Breath(double time, double phase = 0)
     {
-        var tau = time * Math.PI * 2;
-        return new TemperaCameraFrame(
-            (Math.Sin(tau * 0.13 + phase) * 0.65 + Math.Sin(tau * 0.31 + phase * 1.7) * 0.35) * BreathMaxOffset,
-            (Math.Cos(tau * 0.11 + phase * 2.3) * 0.65 + Math.Sin(tau * 0.29 + phase * 0.9) * 0.35) * BreathMaxOffset,
-            Math.Sin(tau * 0.09 + phase * 1.3) * BreathMaxScale,
-            Math.Sin(tau * 0.07 + phase * 2.9) * BreathMaxRotation);
+        var b = EffectCameraBreath.Calculate(time, phase);
+        return new TemperaCameraFrame(b.X, b.Y, b.Scale, b.Rotation);
     }
 
     /// <summary>Ramps the breath in after the lyric reveal completes, so it never pops in mid-line.</summary>
     public static double BreathWeight(double time, double revealDoneTime, double rampDuration = 1.2) =>
-        rampDuration <= 0 ? time >= revealDoneTime ? 1 : 0 : EaseInOutCubic(TemperaEasing.Clamp01((time - revealDoneTime) / rampDuration));
+        EffectCameraBreath.Weight(time, revealDoneTime, rampDuration, useCubic: true);
 }
 
 /// <summary>Folia TemperaTransitionFrame: the pose of a paragraph scene during a boundary.</summary>

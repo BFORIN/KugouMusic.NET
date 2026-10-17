@@ -45,13 +45,7 @@ public readonly record struct LumiereGlyphTiming(double Start, double End);
 /// </summary>
 public static class LumiereReveal
 {
-    public static IReadOnlyList<string> Graphemes(string text)
-    {
-        var output = new List<string>();
-        var enumerator = StringInfo.GetTextElementEnumerator(text);
-        while (enumerator.MoveNext()) output.Add((string)enumerator.Current);
-        return output;
-    }
+    public static IReadOnlyList<string> Graphemes(string text) => EffectTextMetrics.SplitGraphemes(text);
 
     private static void Even(List<LumiereGlyphTiming> output, int count, double start, double end)
     {

@@ -6,7 +6,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using AvaloniaLyrics;
+using AvaloniaSilkEffects;
 using KugouAvaloniaPlayer.ViewModels;
+using KugouAvaloniaPlayer.Views.NowPlayingThemes;
 
 namespace KugouAvaloniaPlayer.Controls;
 
@@ -73,29 +75,19 @@ public sealed class PendoloVisualizerControl : Control
             Color.Parse("#8797A1"));
 
     public static readonly StyledProperty<bool> ParallaxEnabledProperty =
-        AvaloniaProperty.Register<PendoloVisualizerControl, bool>(
-            nameof(ParallaxEnabled),
-            false);
+        MouseParallax3D.ParallaxEnabledProperty.AddOwner<PendoloVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxMaxTiltProperty =
-        AvaloniaProperty.Register<PendoloVisualizerControl, double>(
-            nameof(ParallaxMaxTilt),
-            14);
+        MouseParallax3D.ParallaxMaxTiltProperty.AddOwner<PendoloVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxResponseProperty =
-        AvaloniaProperty.Register<PendoloVisualizerControl, double>(
-            nameof(ParallaxResponse),
-            7.5);
+        MouseParallax3D.ParallaxResponseProperty.AddOwner<PendoloVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxOriginXProperty =
-        AvaloniaProperty.Register<PendoloVisualizerControl, double>(
-            nameof(ParallaxOriginX),
-            0.5);
+        MouseParallax3D.ParallaxOriginXProperty.AddOwner<PendoloVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxOriginYProperty =
-        AvaloniaProperty.Register<PendoloVisualizerControl, double>(
-            nameof(ParallaxOriginY),
-            0.5);
+        MouseParallax3D.ParallaxOriginYProperty.AddOwner<PendoloVisualizerControl>();
 
     private bool _frameQueued;
     private bool _hasFrameTimestamp;
@@ -103,7 +95,7 @@ public sealed class PendoloVisualizerControl : Control
     private double _displayLineIndex = -1;
     private double _lineVelocity;
     private double _clockSeconds;
-    private double _smoothedEnergy = 0.15;
+    private AudioEnergyTracker _energyTracker = new(0.15f);
     private readonly List<LyricHitTarget> _lyricHitTargets = [];
     private int? _manualAnchorIndex;
     private int? _pendingSeekIndex;
@@ -232,10 +224,7 @@ public sealed class PendoloVisualizerControl : Control
     private void ApplyParallax()
     {
         _parallax ??= new MouseParallax3D(this);
-        _parallax.Enabled = ParallaxEnabled;
-        _parallax.MaxTilt = ParallaxMaxTilt;
-        _parallax.Response = ParallaxResponse;
-        _parallax.Origin = new RelativePoint(ParallaxOriginX, ParallaxOriginY, RelativeUnit.Relative);
+        _parallax.Configure(ParallaxEnabled, ParallaxMaxTilt, ParallaxResponse, ParallaxOriginX, ParallaxOriginY);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -352,7 +341,7 @@ public sealed class PendoloVisualizerControl : Control
         var lyricRadius = baseRadius + minDimension * 0.06;
         var gearRotation = -_displayLineIndex * Math.PI * 2d / 36d;
 
-        DrawClockwork(context, center, baseRadius, lyricRadius, gearRotation, _smoothedEnergy);
+        DrawClockwork(context, center, baseRadius, lyricRadius, gearRotation, _energyTracker.Current);
         DrawLyrics(context, player, center, lyricRadius, width, height);
     }
 
@@ -426,10 +415,8 @@ public sealed class PendoloVisualizerControl : Control
             _displayLineIndex += _lineVelocity * deltaSeconds;
         }
 
-        var targetEnergy = ResolveAudioEnergy(Player);
-        var response = targetEnergy >= _smoothedEnergy ? 10d : 4d;
-        _smoothedEnergy += (targetEnergy - _smoothedEnergy) *
-                           (1d - Math.Exp(-response * deltaSeconds));
+        var targetEnergy = (float)ResolveAudioEnergy(Player);
+        _energyTracker.Update(targetEnergy, (float)deltaSeconds, 10f, 4f);
 
         InvalidateVisual();
         RequestNextFrame();
@@ -1066,15 +1053,9 @@ public sealed class PendoloVisualizerControl : Control
     private static double ResolveAudioEnergy(PlayerViewModel? player)
     {
         var bars = player?.NowPlayingVisualizerBars;
-        if (bars == null || bars.Length == 0)
-            return 0;
-
-        var count = Math.Min(22, bars.Length);
-        var total = 0d;
-        for (var index = 0; index < count; index++)
-            total += Math.Clamp((bars[index].Height - 6d) / 170d, 0d, 1d);
-
-        return Math.Clamp(total / count, 0d, 1d);
+        return bars is { Length: > 0 }
+            ? NowPlayingThemeHelper.AverageBandEnergy(bars, 0, Math.Min(22, bars.Length))
+            : 0;
     }
 
     private static Color Mix(Color first, Color second, double amount, byte alpha)

@@ -41,7 +41,7 @@ public sealed class SonnetStaffView
         var halfHeight = spacing * 2;
         _playableWidth = staffWidth * 0.92f;
         _beatWidth = (float)(_playableWidth / TotalBeats);
-        var primary = Rgb(theme.Primary);
+        var primary = theme.Primary.ToRgb();
 
         var staff = new SonnetDrawList();
         for (var line = 0; line < 5; line++)
@@ -111,7 +111,7 @@ public sealed class SonnetStaffView
 
     internal void Update(double time)
     {
-        var cycle = ((time - _shotStart) % CycleSeconds + CycleSeconds) % CycleSeconds;
+        var cycle = EffectMath.Mod(time - _shotStart, CycleSeconds);
         var beat = cycle / CycleSeconds * TotalBeats;
         _cursor.Position = new Vector2((float)(-_playableWidth / 2 + _beatWidth * beat), -_cursor.Size.Y / 2);
         for (var index = 0; index < _notes.Length; index++)
@@ -130,11 +130,6 @@ public sealed class SonnetStaffView
     /// <summary>Folia's virtual instrumental program: a staff line every eight seconds.</summary>
     public static IReadOnlyList<SonnetLine> VirtualLines(int count = 60) =>
         Enumerable.Range(0, count).Select(index => new SonnetLine(Marker, index * 8, index * 8 + 6, [])).ToArray();
-
-    private static uint Rgb(EffectColor color) =>
-        (uint)(Math.Clamp((int)MathF.Round(color.R * 255), 0, 255) << 16
-            | Math.Clamp((int)MathF.Round(color.G * 255), 0, 255) << 8
-            | Math.Clamp((int)MathF.Round(color.B * 255), 0, 255));
 
     private sealed record NoteView(ShapeNode Head, EffectContainer Marks, double StartBeat, double Beats, bool Sharp);
 }

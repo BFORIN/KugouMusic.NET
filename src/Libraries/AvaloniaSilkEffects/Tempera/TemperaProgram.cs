@@ -287,7 +287,7 @@ public static partial class TemperaProgramCompiler
     {
         if (!segment.IsWordLike) return false;
         var runes = segment.Text.EnumerateRunes().ToArray();
-        return runes.Length == 1 && Sonnet.SonnetTokenizer.IsHan(runes[0]);
+        return runes.Length == 1 && EffectTextMetrics.IsHan(runes[0]);
     }
 
     private static List<ShotChunk> BuildShotChunks(List<TemperaCompiledLine> lines, string seed, int paragraphIndex, bool wholeLine)

@@ -31,10 +31,10 @@ public static class SonnetTextFixedGeo
     {
         if (isChorusEffect)
         {
-            var chorusSeed = Mod(seed, 10);
+            var chorusSeed = EffectMath.Mod(seed, 10);
             return chorusSeed < 9 ? HollowVariant(seed, 10, chorusSeed) : Solid[seed / 10 % Solid.Length];
         }
-        var legacyType = Mod(seed, 4);
+        var legacyType = EffectMath.Mod(seed, 4);
         return legacyType is 1 or 2 ? HollowVariant(seed, 4, legacyType) : Solid[seed / 4 % Solid.Length];
     }
 
@@ -42,9 +42,9 @@ public static class SonnetTextFixedGeo
     {
         var plan = ResolvePlan(seed, isChorusEffect);
         var g = new SonnetDrawList();
-        var color = Rgb(seed % 2 == 0 ? theme.Primary : theme.Secondary);
-        var secondary = Rgb(theme.Secondary);
-        var accent = Rgb(theme.Accent);
+        var color = (seed % 2 == 0 ? theme.Primary : theme.Secondary).ToRgb();
+        var secondary = theme.Secondary.ToRgb();
+        var accent = theme.Accent.ToRgb();
         var alpha = (isChorusEffect ? 0.4 : 0.25) + seed % 10 * 0.03;
         var scaleMultiplier = isChorusEffect ? 1.5f + seed % 5 * 0.3f : 1;
         var width = Math.Max(fontSize * 2.5f * scaleMultiplier, layoutWidth * 0.12f * scaleMultiplier);
@@ -139,12 +139,5 @@ public static class SonnetTextFixedGeo
     }
 
     private static SonnetTextFixedGeoVariant HollowVariant(int seed, int divisor, int offset) =>
-        Hollow[Mod(seed / divisor + offset, Hollow.Length)];
-
-    private static int Mod(int value, int modulo) => (value % modulo + modulo) % modulo;
-
-    private static uint Rgb(EffectColor color) =>
-        (uint)(Math.Clamp((int)MathF.Round(color.R * 255), 0, 255) << 16
-            | Math.Clamp((int)MathF.Round(color.G * 255), 0, 255) << 8
-            | Math.Clamp((int)MathF.Round(color.B * 255), 0, 255));
+        Hollow[EffectMath.Mod(seed / divisor + offset, Hollow.Length)];
 }

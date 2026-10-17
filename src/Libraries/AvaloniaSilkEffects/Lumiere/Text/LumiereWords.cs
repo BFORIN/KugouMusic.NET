@@ -15,9 +15,8 @@ public static class LumiereWords
     public static IReadOnlyList<LumiereWordSpan> Segment(string text)
     {
         if (string.IsNullOrEmpty(text)) return [];
-        var line = new SonnetLine(text, 0, 0, []);
         var elements = SonnetTokenizer.Elements(text);
-        var tokens = SonnetTokenizer.Tokenize(line, elements, SonnetTokenizer.SongLanguage([line]));
+        var tokens = SonnetTokenizer.Tokenize(text, elements, SonnetTokenizer.SongLanguage([text]));
         return [.. tokens.Select(token => new LumiereWordSpan(token.Word.Text, token.Start, token.End, !token.IsWord))];
     }
 }

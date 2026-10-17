@@ -8,23 +8,13 @@ namespace AvaloniaSilkEffects.Tempera;
 public static class TemperaRandom
 {
     /// <summary>FNV-1a over UTF-16 code units, like <c>charCodeAt</c>.</summary>
-    public static uint Hash(string value)
-    {
-        var hash = 2166136261u;
-        foreach (var character in value)
-        {
-            hash ^= character;
-            hash = unchecked(hash * 16777619u);
-        }
-        return hash;
-    }
+    public static uint Hash(string value) => EffectMath.Hash(value);
 
     /// <summary><c>Math.imul((Math.trunc(seed) ^ salt) &gt;&gt;&gt; 0, 2654435761) &gt;&gt;&gt; 0</c>.</summary>
-    public static uint Mix(long seed, long salt) => unchecked(((uint)seed ^ (uint)salt) * 2654435761u);
+    public static uint Mix(long seed, long salt) => EffectMath.Mix(seed, salt);
 
     /// <summary>Deterministic 0..1 jitter per element index.</summary>
-    public static double Hash01(long seed, long index, long salt) =>
-        Mix(seed + unchecked((int)((index + 1) * 97)), salt) / 4294967296d;
+    public static double Hash01(long seed, long index, long salt) => EffectMath.Hash01(seed, index, salt);
 
     /// <summary>A deterministic pick that differs from <paramref name="previous"/> when possible.</summary>
     public static string ChooseWithoutRepeat(IReadOnlyList<string> choices, string seed, string? previous)

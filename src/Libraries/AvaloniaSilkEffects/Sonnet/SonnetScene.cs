@@ -551,12 +551,7 @@ public sealed class SonnetScene : EffectScene
         Device.PostProcess.LensDispersion = Tuning.PostProcessLensDispersion;
     }
 
-    private float AnimationScale() => Theme.AnimationIntensity switch
-    {
-        SonnetAnimationIntensity.Calm => 0.65f,
-        SonnetAnimationIntensity.Chaotic => 1.35f,
-        _ => 1,
-    };
+    private float AnimationScale() => (float)Theme.AnimationIntensity.ToMotionScale();
 
     private void UpdateSongSwap()
     {

@@ -13,6 +13,21 @@ namespace KugouAvaloniaPlayer.Controls;
 // The helper owns its own animation loop so the return-to-flat still animates even
 // when the host visualizer's frame loop is idle (e.g. playback stopped).
 public sealed class MouseParallax3D(Control target) {
+    public static readonly StyledProperty<bool> ParallaxEnabledProperty =
+        AvaloniaProperty.RegisterAttached<MouseParallax3D, Control, bool>("ParallaxEnabled", false);
+
+    public static readonly StyledProperty<double> ParallaxMaxTiltProperty =
+        AvaloniaProperty.RegisterAttached<MouseParallax3D, Control, double>("ParallaxMaxTilt", 14);
+
+    public static readonly StyledProperty<double> ParallaxResponseProperty =
+        AvaloniaProperty.RegisterAttached<MouseParallax3D, Control, double>("ParallaxResponse", 7.5);
+
+    public static readonly StyledProperty<double> ParallaxOriginXProperty =
+        AvaloniaProperty.RegisterAttached<MouseParallax3D, Control, double>("ParallaxOriginX", 0.5);
+
+    public static readonly StyledProperty<double> ParallaxOriginYProperty =
+        AvaloniaProperty.RegisterAttached<MouseParallax3D, Control, double>("ParallaxOriginY", 0.5);
+
     // Maximum tilt in degrees; larger = steeper.
     public double MaxTilt { get; set; } = 14;
     public double Response { get; set; } = 7.5;
@@ -21,6 +36,17 @@ public sealed class MouseParallax3D(Control target) {
     // reset. The property is applied live via ResetToFlatIfDisabled whenever a
     // top-level pointer event lands.
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// 一次性同步视差配置。
+    /// </summary>
+    public void Configure(bool enabled, double maxTilt, double response, double originX, double originY)
+    {
+        Enabled = enabled;
+        MaxTilt = maxTilt;
+        Response = response;
+        Origin = new RelativePoint(originX, originY, RelativeUnit.Relative);
+    }
 
     private RelativePoint _origin = RelativePoint.Center;
 

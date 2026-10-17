@@ -38,20 +38,20 @@ internal sealed class SonnetStrokeReveal
         for (var i = 0; i < _fills.Count; i++)
         {
             var fill = _fills[i];
-            var delay = i * 0.6180339887498949 % 1 * 0.45;
-            var jitter = unchecked((uint)i * 2654435761u) / 4294967296d;
+            var delay = (i * EffectMath.GoldenRatioFraction) % 1 * 0.45;
+            var jitter = EffectMath.KnuthHash01((uint)i);
             var span = Math.Min(0.4 + jitter * 0.25, 1 - delay);
             var local = Math.Clamp((progress - delay) / span, 0, 1);
-            fill.Node.Alpha = fill.Alpha * (float)(1 - Math.Pow(1 - local, 3));
+            fill.Node.Alpha = fill.Alpha * (float)EffectEasing.CubicOut(local);
         }
         for (var i = 0; i < _strokes.Count; i++)
         {
             var stroke = _strokes[i];
-            var delay = i * 0.6180339887498949 % 1 * 0.5;
-            var jitter = unchecked((uint)i * 2654435761u) / 4294967296d;
+            var delay = (i * EffectMath.GoldenRatioFraction) % 1 * 0.5;
+            var jitter = EffectMath.KnuthHash01((uint)i);
             var span = Math.Min(0.32 + jitter * 0.26, 1 - delay);
             var local = Math.Clamp((progress - delay) / span, 0, 1);
-            var eased = (float)(1 - Math.Pow(1 - local, 3));
+            var eased = (float)EffectEasing.CubicOut(local);
             stroke.Node.IsVisible = eased > 0;
             if (stroke.Node is ShapeNode line)
                 line.Size = stroke.Size * eased;

@@ -9,6 +9,7 @@ using Avalonia.Media;
 using AvaloniaSilkEffects;
 using KugouAvaloniaPlayer.Models;
 using KugouAvaloniaPlayer.ViewModels;
+using KugouAvaloniaPlayer.Views.NowPlayingThemes;
 
 namespace KugouAvaloniaPlayer.Controls;
 
@@ -62,29 +63,19 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         AvaloniaProperty.Register<FumeVisualizerControl, double>(nameof(HeroScale), 1);
 
     public static readonly StyledProperty<bool> ParallaxEnabledProperty =
-        AvaloniaProperty.Register<FumeVisualizerControl, bool>(
-            nameof(ParallaxEnabled),
-            false);
+        MouseParallax3D.ParallaxEnabledProperty.AddOwner<FumeVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxMaxTiltProperty =
-        AvaloniaProperty.Register<FumeVisualizerControl, double>(
-            nameof(ParallaxMaxTilt),
-            14);
+        MouseParallax3D.ParallaxMaxTiltProperty.AddOwner<FumeVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxResponseProperty =
-        AvaloniaProperty.Register<FumeVisualizerControl, double>(
-            nameof(ParallaxResponse),
-            7.5);
+        MouseParallax3D.ParallaxResponseProperty.AddOwner<FumeVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxOriginXProperty =
-        AvaloniaProperty.Register<FumeVisualizerControl, double>(
-            nameof(ParallaxOriginX),
-            0.5);
+        MouseParallax3D.ParallaxOriginXProperty.AddOwner<FumeVisualizerControl>();
 
     public static readonly StyledProperty<double> ParallaxOriginYProperty =
-        AvaloniaProperty.Register<FumeVisualizerControl, double>(
-            nameof(ParallaxOriginY),
-            0.5);
+        MouseParallax3D.ParallaxOriginYProperty.AddOwner<FumeVisualizerControl>();
 
     private readonly FumeEffectScene _fumeScene = new();
 
@@ -246,10 +237,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
     private void ApplyParallax()
     {
         _parallax ??= new MouseParallax3D(this);
-        _parallax.Enabled = ParallaxEnabled;
-        _parallax.MaxTilt = ParallaxMaxTilt;
-        _parallax.Response = ParallaxResponse;
-        _parallax.Origin = new RelativePoint(ParallaxOriginX, ParallaxOriginY, RelativeUnit.Relative);
+        _parallax.Configure(ParallaxEnabled, ParallaxMaxTilt, ParallaxResponse, ParallaxOriginX, ParallaxOriginY);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -817,40 +805,23 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         if (bars.Length == 0)
             return default;
 
-        static double Average(IReadOnlyList<VisualizerBandState> values, int start, int end)
-        {
-            var total = 0d;
-            var count = 0;
-            for (var index = start; index < end && index < values.Count; index++)
-            {
-                total += Math.Clamp((values[index].Height - 6) / 170, 0, 1);
-                count++;
-            }
-            return count == 0 ? 0 : total / count;
-        }
-
         var length = bars.Length;
         return new FumeAudioEnergy(
-            Average(bars, 0, length / 5),
-            Average(bars, length / 5, length * 2 / 5),
-            Average(bars, length * 2 / 5, length * 3 / 5),
-            Average(bars, length * 3 / 5, length * 4 / 5),
-            Average(bars, length * 4 / 5, length));
+            NowPlayingThemeHelper.AverageBandEnergy(bars, 0, length / 5),
+            NowPlayingThemeHelper.AverageBandEnergy(bars, length / 5, length * 2 / 5),
+            NowPlayingThemeHelper.AverageBandEnergy(bars, length * 2 / 5, length * 3 / 5),
+            NowPlayingThemeHelper.AverageBandEnergy(bars, length * 3 / 5, length * 4 / 5),
+            NowPlayingThemeHelper.AverageBandEnergy(bars, length * 4 / 5, length));
     }
 
     private static double Mix(double from, double to, double amount) =>
-        from + (to - from) * amount;
+        EffectMath.Lerp(from, to, amount);
 
     private static double EaseOutCubic(double value) =>
-        1 - Math.Pow(1 - Math.Clamp(value, 0, 1), 3);
+        EffectEasing.CubicOut(value);
 
-    private static double EaseInOutCubic(double value)
-    {
-        var normalized = Math.Clamp(value, 0, 1);
-        return normalized < 0.5
-            ? 4 * normalized * normalized * normalized
-            : 1 - Math.Pow(-2 * normalized + 2, 3) / 2;
-    }
+    private static double EaseInOutCubic(double value) =>
+        EffectEasing.EaseInOutCubic(value);
 
     private static double Quadratic(double from, double control, double to, double amount)
     {

@@ -3,41 +3,18 @@ namespace AvaloniaSilkEffects.Tempera;
 /// <summary>Folia temperaMotionEasing.ts: CSS cubic-bezier solved by bisection, and the mode's three curves.</summary>
 public static class TemperaEasing
 {
-    public static double Clamp01(double value) => Math.Min(1, Math.Max(0, value));
+    public static double Clamp01(double value) => EffectMath.Clamp01(value);
 
-    private static double Coordinate(double point1, double point2, double time)
-    {
-        var inverse = 1 - time;
-        return 3 * inverse * inverse * time * point1 + 3 * inverse * time * time * point2 + time * time * time;
-    }
-
-    public static double CubicBezier(double x1, double y1, double x2, double y2, double value)
-    {
-        var target = Clamp01(value);
-        if (target == 0 || target == 1) return target;
-        double low = 0, high = 1, parameter = target;
-        for (var iteration = 0; iteration < 12; iteration++)
-        {
-            var x = Coordinate(x1, x2, parameter);
-            if (x < target) low = parameter;
-            else high = parameter;
-            parameter = (low + high) / 2;
-        }
-        return Coordinate(y1, y2, parameter);
-    }
+    public static double CubicBezier(double x1, double y1, double x2, double y2, double value) =>
+        EffectEasing.CubicBezier(x1, y1, x2, y2, value);
 
     /// <summary>Long soft deceleration: decisive at the start, then a long creeping tail.</summary>
-    public static double Enter(double value) => CubicBezier(0.22, 1, 0.36, 1, value);
+    public static double Enter(double value) => EffectEasing.EaseEnter(value);
 
-    public static double InOut(double value) => CubicBezier(0.62, 0, 0.32, 1, value);
+    public static double InOut(double value) => EffectEasing.EaseInOutTempera(value);
 
     /// <summary>Mild anticipation for scale, so glyphs settle with a small overshoot.</summary>
-    public static double SoftBack(double value)
-    {
-        var t = Clamp01(value);
-        const double c = 1.42;
-        return 1 + (c + 1) * Math.Pow(t - 1, 3) + c * Math.Pow(t - 1, 2);
-    }
+    public static double SoftBack(double value) => EffectEasing.SoftBack(value);
 
     /// <summary>A shot-relative fraction mapped onto seconds, clamped to a watchable speed.</summary>
     public static double ShotPaced(double shotDuration, double fraction, double minSeconds, double maxSeconds) =>

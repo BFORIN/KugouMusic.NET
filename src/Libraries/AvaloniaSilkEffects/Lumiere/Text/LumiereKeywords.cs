@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace AvaloniaSilkEffects.Lumiere.Text;
 
 /// <summary>A theme keyword and its color (Folia theme.wordColors).</summary>
-public sealed record LumiereWordColor(string Word, EffectColor Color);
+public sealed record LumiereWordColor(string Word, EffectColor Color) : EffectWordColor(Word, Color);
 
 /// <summary>A prepared keyword: CJK phrases match by containment, English by whole words.</summary>
 internal sealed record LumiereKeywordMatcher(Vector3 Color, string[] CjkPhrases, string[] EnglishWords, int Priority);
@@ -46,7 +46,7 @@ internal static partial class LumiereKeywords
 
     private static string Normalize(string text) => NonWord().Replace(text.ToLowerInvariant(), "");
 
-    public static IReadOnlyList<LumiereKeywordMatcher> Prepare(IReadOnlyList<LumiereWordColor>? wordColors, bool enabled)
+    public static IReadOnlyList<LumiereKeywordMatcher> Prepare(IReadOnlyList<EffectWordColor>? wordColors, bool enabled)
     {
         if (!enabled || wordColors is null || wordColors.Count == 0) return [];
         var matchers = new List<LumiereKeywordMatcher>();

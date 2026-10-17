@@ -26,37 +26,19 @@ public readonly record struct LumiereFlowGlyph(string Char, double Scale, double
 /// Measures text like pretext does for Folia: natural width with letter spacing after every grapheme (last included),
 /// matching the per-glyph canvas widths. Cached per (size, text).
 /// </summary>
-internal sealed class LumiereTextMeasurer : IDisposable
+internal sealed class LumiereTextMeasurer(string family, int weight, double letterSpacing, string? sample = null) : IDisposable
 {
-    private readonly SKTypeface _typeface;
-    private readonly double _letterSpacing;
-    private readonly Dictionary<(double, string), double> _cache = [];
-    private readonly Dictionary<double, SKFont> _fonts = [];
+    private readonly string? _sample = sample;
 
-    public LumiereTextMeasurer(string family, int weight, double letterSpacing, string sample)
-    {
-        _typeface = EffectTextureCache.ResolveTypeface(family,
-            new SKFontStyle(Math.Clamp(weight, 100, 900), (int)SKFontStyleWidth.Normal, SKFontStyleSlant.Upright), sample);
-        _letterSpacing = letterSpacing;
-    }
-
-    public double Spacing(double px) => _letterSpacing * px;
+    public double Spacing(double px) => letterSpacing * px;
 
     public double Natural(string text, double px)
     {
-        if (_cache.TryGetValue((px, text), out var width)) return width;
-        if (!_fonts.TryGetValue(px, out var font)) _fonts[px] = font = new SKFont(_typeface, (float)px) { Subpixel = true };
         var count = new StringInfo(text).LengthInTextElements;
-        width = font.MeasureText(text) + Spacing(px) * count;
-        _cache[(px, text)] = width;
-        return width;
+        return EffectTextMetrics.Measure(text, family, weight, px) + Spacing(px) * count;
     }
 
-    public void Dispose()
-    {
-        foreach (var font in _fonts.Values) font.Dispose();
-        _typeface.Dispose();
-    }
+    public void Dispose() => _ = _sample;
 }
 
 /// <summary>

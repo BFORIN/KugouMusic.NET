@@ -337,13 +337,13 @@ internal static partial class SonnetMgBuilder
         if (geoVariant >= 48)
         {
             root.Add(SonnetExtendedDrawLists.Build(geoVariant, width, height, seed,
-                ToRgb(theme.Primary), ToRgb(theme.Secondary)).Replay(48));
+                theme.Primary.ToRgb(), theme.Secondary.ToRgb()).Replay(48));
             return;
         }
         if (SonnetCoreDrawLists.Handles(geoVariant))
         {
             root.Add(SonnetCoreDrawLists.Build(geoVariant, width, height, seed,
-                ToRgb(theme.Primary), ToRgb(theme.Secondary)).Replay(48));
+                theme.Primary.ToRgb(), theme.Secondary.ToRgb()).Replay(48));
             return;
         }
         if (geoVariant is >= 24 and <= 35)
@@ -354,7 +354,7 @@ internal static partial class SonnetMgBuilder
         if (geoVariant is >= 14 and <= 17)
         {
             var direction = seed % 2 == 0 ? 1d : -1d;
-            var color = ToRgb(theme.Primary);
+            var color = theme.Primary.ToRgb();
             if (geoVariant == 14)
             {
                 root.Add(SonnetSpatialDrawLists.SolidCuboid(radius * 0.18 * direction, radius * 0.03, radius * 0.62, radius * 0.7, radius * 0.22 * direction, -radius * 0.16, color, 0.34).Replay());
@@ -533,10 +533,6 @@ internal static partial class SonnetMgBuilder
         }
     }
 
-    private static uint ToRgb(EffectColor color) =>
-        (uint)(Math.Clamp((int)MathF.Round(color.R * 255), 0, 255) << 16
-            | Math.Clamp((int)MathF.Round(color.G * 255), 0, 255) << 8
-            | Math.Clamp((int)MathF.Round(color.B * 255), 0, 255));
 
     private static void AddRect(EffectContainer root, Vector2 position, Vector2 size, EffectColor color) => root.Add(new ShapeNode { Position = position, Size = size, Color = color });
     private static void AddCircle(EffectContainer root, Vector2 center, float radius, EffectColor color) => root.Add(new ShapeNode { Shape = EffectShapeKind.Ellipse, Position = center - new Vector2(radius), Size = new Vector2(radius * 2), Color = color });

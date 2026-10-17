@@ -1,3 +1,5 @@
+global using LumiereAnimationIntensity = AvaloniaSilkEffects.EffectAnimationIntensity;
+
 using System.Numerics;
 
 namespace AvaloniaSilkEffects.Lumiere;
@@ -51,13 +53,6 @@ public sealed record LumierePalette(Vector3 Light, Vector3 Lit, Vector3 Unlit)
             LumiereColor.Mix(warmLit, LumiereColor.Mix(primary, LumiereColor.White, 0.2f), mix),
             LumiereColor.Mix(LumiereColor.Mix(light, UnlitCool, 0.55f), LumiereColor.Mix(secondary, UnlitCool, 0.35f), mix));
     }
-}
-
-public enum LumiereAnimationIntensity
-{
-    Calm,
-    Normal,
-    Chaotic,
 }
 
 public sealed record LumiereTheme(

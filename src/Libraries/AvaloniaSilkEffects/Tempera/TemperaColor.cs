@@ -1,4 +1,4 @@
-using AvaloniaSilkEffects.Lumiere.Text;
+global using TemperaAnimationIntensity = AvaloniaSilkEffects.EffectAnimationIntensity;
 
 namespace AvaloniaSilkEffects.Tempera;
 
@@ -35,13 +35,6 @@ public readonly record struct TemperaRgb(int R, int G, int B)
     public override string ToString() => $"#{R:x2}{G:x2}{B:x2}";
 }
 
-public enum TemperaAnimationIntensity
-{
-    Calm,
-    Normal,
-    Chaotic,
-}
-
 /// <summary>The Folia theme side Tempera reads: four colours, the font and the animation intensity.</summary>
 public sealed record TemperaTheme(
     TemperaRgb Background,
@@ -57,12 +50,7 @@ public sealed record TemperaTheme(
         TemperaRgb.FromHex(0x09090b), TemperaRgb.FromHex(0xf4f4f5), TemperaRgb.FromHex(0x71717a), TemperaRgb.FromHex(0xf4f4f5));
 
     /// <summary>Theme keywords and their colours (Folia theme.wordColors).</summary>
-    public IReadOnlyList<LumiereWordColor>? WordColors { get; init; }
+    public IReadOnlyList<EffectWordColor>? WordColors { get; init; }
 
-    internal double AnimationScale => AnimationIntensity switch
-    {
-        TemperaAnimationIntensity.Calm => 0.65,
-        TemperaAnimationIntensity.Chaotic => 1.35,
-        _ => 1,
-    };
+    internal double AnimationScale => AnimationIntensity.ToMotionScale();
 }

@@ -29,16 +29,15 @@ public static class TemperaSegmentation
     public static IReadOnlyList<TemperaWordPiece> Segment(string text, SonnetLanguage songLanguage = SonnetLanguage.Auto)
     {
         if (string.IsNullOrEmpty(text)) return [];
-        var line = new SonnetLine(text, 0, 0, []);
         var elements = SonnetTokenizer.Elements(text);
-        var language = songLanguage == SonnetLanguage.Auto ? SonnetTokenizer.SongLanguage([line]) : songLanguage;
-        var tokens = SonnetTokenizer.Tokenize(line, elements, language);
+        var language = songLanguage == SonnetLanguage.Auto ? SonnetTokenizer.SongLanguage([text]) : songLanguage;
+        var tokens = SonnetTokenizer.Tokenize(text, elements, language);
         var pieces = new List<(int Start, int End, string Text, bool Word, bool Chinese)>(tokens.Count);
         foreach (var token in tokens)
         {
             var word = token.Word;
             var chinese = word.Language == SonnetLanguage.Chinese
-                && word.Source is SonnetLexicalSource.Dictionary or SonnetLexicalSource.UnknownWord && IsHanOnly(word.Text);
+                && word.Source is SonnetLexicalSource.Dictionary or SonnetLexicalSource.UnknownWord && EffectTextMetrics.IsHanOnly(word.Text);
             var previous = pieces.Count > 0 ? pieces[^1] : default;
             if (chinese && pieces.Count > 0 && previous.Chinese && previous.End == word.StartOffset
                 && TrailingParticles.Contains(word.Text) && !NonHosts.Contains(previous.Text))
@@ -49,12 +48,5 @@ public static class TemperaSegmentation
             pieces.Add((word.StartOffset, word.EndOffset, word.Text, token.IsWord, chinese));
         }
         return [.. pieces.Select(piece => new TemperaWordPiece(piece.Start, piece.End - piece.Start, piece.Word))];
-    }
-
-    private static bool IsHanOnly(string text)
-    {
-        foreach (var rune in text.EnumerateRunes())
-            if (!SonnetTokenizer.IsHan(rune)) return false;
-        return text.Length > 0;
     }
 }

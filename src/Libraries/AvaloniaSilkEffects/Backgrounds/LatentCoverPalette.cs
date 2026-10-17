@@ -1,6 +1,4 @@
 using SkiaSharp;
-using AvaloniaSilkEffects.Sonnet;
-
 namespace AvaloniaSilkEffects.Backgrounds;
 
 public static class LatentCoverPalette
@@ -23,6 +21,6 @@ public static class LatentCoverPalette
             pixels[index+2] = color.Blue;
             pixels[index+3] = color.Alpha;
         }
-        return SonnetCoverPalette.Extract(pixels);
+        return PaletteExtractor.Extract(pixels);
     }
 }

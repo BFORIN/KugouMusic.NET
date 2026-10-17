@@ -1,17 +1,11 @@
 using System;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Threading;
-using Avalonia.VisualTree;
 using AvaloniaSilkEffects;
 using AvaloniaSilkEffects.Sonnet;
-using AvaloniaLyrics;
 using KugouAvaloniaPlayer.ViewModels;
+
+// 凝诗 (Sonnet) 主题视图：使用 SilkThemePlaybackCoordinator 统一管理播放时钟同步、音频可视化与场景调度
 
 namespace KugouAvaloniaPlayer.Views.NowPlayingThemes;
 
@@ -22,26 +16,12 @@ public partial class SonnetNowPlayingThemeView : UserControl
         Primary: new(1, 1, 1, 1),
         Accent: new(0.55f, 0.59f, 0.72f, 1),
         Secondary: new(0.42f, 0.45f, 0.57f, 1),
-        FontFamily: ResolveSonnetFontFamily(),
+        FontFamily: NowPlayingThemeHelper.ResolveFontFamily(),
         FontWeight: 600,
-        AnimationIntensity: SonnetAnimationIntensity.Normal,
+        AnimationIntensity: EffectAnimationIntensity.Normal,
         Name: "Midnight Dream",
         Description: "SONNET / FOLIA v0.7.2");
 
-    private static string ResolveSonnetFontFamily()
-    {
-#if KUGOU_WINDOWS
-        return "Microsoft YaHei UI";
-#elif KUGOU_LINUX
-        return "Noto Sans CJK SC";
-#elif KUGOU_MACOS
-        return "PingFang SC";
-#else
-        return "Noto Sans CJK SC";
-#endif
-    }
-
-    private readonly DispatcherTimer _diagnosticTimer;
 #if DEBUG
     private readonly TextBlock _presetDebugText = new()
     {
@@ -51,18 +31,9 @@ public partial class SonnetNowPlayingThemeView : UserControl
     };
     private readonly Border _presetDebugOverlay;
 #endif
-    private NowPlayingViewModel? _viewModel;
-    private PlayerViewModel? _player;
-    private SonnetScene? _scene;
-    private bool _sceneBuildQueued;
-    private double _lastSyncedPositionSeconds = double.NegativeInfinity;
-    private long _lastSyncTimestamp;
-    private bool _lastSyncPaused = true;
 
-    // Resync the GL scene clock only when it drifted from the audio position by
-    // more than this amount; between syncs the render clock advances scene time
-    // smoothly instead of being re-anchored on every position tick.
-    private const double ClockResyncThresholdSeconds = 0.08;
+    private readonly SilkThemePlaybackCoordinator _coordinator;
+    private SonnetScene? _scene;
 
     public SonnetNowPlayingThemeView()
     {
@@ -84,120 +55,31 @@ public partial class SonnetNowPlayingThemeView : UserControl
         };
         EffectViewport.Children.Add(_presetDebugOverlay);
 #endif
-        DataContextChanged += OnDataContextChanged;
-        EffectSurface.InitializationFailed += OnInitializationFailed;
-        _diagnosticTimer = new DispatcherTimer(
-            TimeSpan.FromMilliseconds(400),
-            DispatcherPriority.Background,
-            (_, _) => RefreshDiagnostic());
+        _coordinator = new SilkThemePlaybackCoordinator(
+            this, EffectSurface, "Sonnet", DiagnosticOverlay, DiagnosticText, RebuildScene, OnVisualizerUpdated, RefreshPresetDebug);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        HookViewModel();
-        QueueSceneBuild();
-        _diagnosticTimer.Start();
+        _coordinator.OnAttachedToVisualTree();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        _diagnosticTimer.Stop();
-        UnhookViewModel();
-        EffectSurface.Scene = null;
+        _coordinator.OnDetachedFromVisualTree();
         _scene = null;
         base.OnDetachedFromVisualTree(e);
     }
 
-    private void OnDataContextChanged(object? sender, EventArgs e)
+    private void RebuildScene(PlayerViewModel player, NowPlayingViewModel viewModel)
     {
-        UnhookViewModel();
-        HookViewModel();
-        QueueSceneBuild();
-    }
-
-    private void HookViewModel()
-    {
-        var viewModel = DataContext as NowPlayingViewModel;
-        if (ReferenceEquals(_viewModel, viewModel))
-            return;
-
-        _viewModel = viewModel;
-        if (_viewModel is not null)
-            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        _player = viewModel?.Player;
-        if (_player is null)
-            return;
-
-        _player.PropertyChanged += OnPlayerPropertyChanged;
-        _player.RenderLyricLines.CollectionChanged += OnLyricsCollectionChanged;
-        _player.VisualizerUpdated += OnVisualizerUpdated;
-        SynchronizePlaybackClock();
-    }
-
-    private void UnhookViewModel()
-    {
-        if (_player is not null)
-        {
-            _player.PropertyChanged -= OnPlayerPropertyChanged;
-            _player.RenderLyricLines.CollectionChanged -= OnLyricsCollectionChanged;
-            _player.VisualizerUpdated -= OnVisualizerUpdated;
-        }
-
-        if (_viewModel is not null)
-            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
-
-        _player = null;
-        _viewModel = null;
-    }
-
-    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName == nameof(NowPlayingViewModel.LyricColor))
-            QueueSceneBuild();
-    }
-
-    private void OnPlayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(PlayerViewModel.CurrentPlayingSong) or
-            nameof(PlayerViewModel.DisplayedPlayingSong))
-        {
-            QueueSceneBuild();
-            return;
-        }
-
-        if (e.PropertyName is nameof(PlayerViewModel.CurrentPositionSeconds) or
-            nameof(PlayerViewModel.IsPlayingAudio))
-            SynchronizePlaybackClock();
-    }
-
-    private void OnLyricsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => QueueSceneBuild();
-
-    private void QueueSceneBuild()
-    {
-        if (_sceneBuildQueued || !this.IsAttachedToVisualTree())
-            return;
-
-        _sceneBuildQueued = true;
-        Dispatcher.UIThread.Post(() =>
-        {
-            _sceneBuildQueued = false;
-            if (this.IsAttachedToVisualTree())
-                RebuildScene();
-        }, DispatcherPriority.Background);
-    }
-
-    private void RebuildScene()
-    {
-        var player = _player;
-        if (player is null)
-            return;
-
         var song = player.DisplayedPlayingSong ?? player.CurrentPlayingSong;
-        var identity = ResolveTrackIdentity(song);
-        var lines = BuildLines(player.RenderLyricLines, player.TotalDurationSeconds);
-        var program = SonnetProgramCompiler.Compile(lines, identity);
-        var color = _viewModel!.LyricColor;
+        var identity = NowPlayingThemeHelper.ResolveTrackIdentity(song, "sonnet");
+        var program = SonnetProgramCompiler.Compile(
+            NowPlayingThemeHelper.BuildSonnetLines(player.RenderLyricLines, player.TotalDurationSeconds),
+            identity);
+        var color = viewModel.LyricColor;
         var theme = PlayerTheme with
         {
             Primary = new EffectColor(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f)
@@ -235,48 +117,18 @@ public partial class SonnetNowPlayingThemeView : UserControl
             _scene.SetSong(context, mode);
         }
 
-        SynchronizePlaybackClock();
+        _coordinator.SynchronizePlaybackClock();
         OnVisualizerUpdated();
         EffectSurface.RenderOnce();
     }
 
-    private void SynchronizePlaybackClock()
-    {
-        var player = _player;
-        if (player is null)
-            return;
-
-        var paused = !player.IsPlayingAudio;
-        var position = Math.Max(0, player.CurrentPositionSeconds);
-
-        // While playing, extrapolate where the scene clock should be by now and
-        // compare that against the audio position; while paused the scene clock
-        // is frozen, so compare directly. First call always syncs.
-        var drifted = true;
-        if (_lastSyncPaused == paused && !double.IsNegativeInfinity(_lastSyncedPositionSeconds))
-        {
-            var expected = paused
-                ? _lastSyncedPositionSeconds
-                : _lastSyncedPositionSeconds + Stopwatch.GetElapsedTime(_lastSyncTimestamp).TotalSeconds;
-            drifted = Math.Abs(position - expected) >= ClockResyncThresholdSeconds;
-        }
-
-        if (!drifted)
-            return;
-
-        _lastSyncPaused = paused;
-        _lastSyncedPositionSeconds = position;
-        _lastSyncTimestamp = Stopwatch.GetTimestamp();
-        EffectSurface.IsPaused = paused;
-        EffectSurface.Seek(TimeSpan.FromSeconds(position));
-    }
-
     private void OnVisualizerUpdated()
     {
-        if (_scene is null || _player is null)
+        var player = _coordinator.Player;
+        if (_scene is null || player is null)
             return;
 
-        var bars = _player.NowPlayingVisualizerBars;
+        var bars = player.NowPlayingVisualizerBars;
         if (bars.Length == 0)
         {
             _scene.Audio = default;
@@ -286,32 +138,13 @@ public partial class SonnetNowPlayingThemeView : UserControl
         var bassEnd = Math.Max(1, bars.Length / 3);
         var vocalStart = bars.Length / 3;
         var vocalEnd = Math.Max(vocalStart + 1, bars.Length * 2 / 3);
-        double power = 0;
-        double bass = 0;
-        double vocal = 0;
-        for (var i = 0; i < bars.Length; i++)
-        {
-            var value = Math.Clamp((bars[i].Height - 6d) / 170d, 0d, 1d);
-            power += value;
-            if (i < bassEnd)
-                bass += value;
-            if (i >= vocalStart && i < vocalEnd)
-                vocal += value;
-        }
-
         _scene.Audio = new(
-            (float)(power / bars.Length),
-            (float)(bass / bassEnd),
-            (float)(vocal / (vocalEnd - vocalStart)));
+            (float)NowPlayingThemeHelper.AverageBandEnergy(bars, 0, bars.Length),
+            (float)NowPlayingThemeHelper.AverageBandEnergy(bars, 0, bassEnd),
+            (float)NowPlayingThemeHelper.AverageBandEnergy(bars, vocalStart, vocalEnd));
     }
 
-    private void OnInitializationFailed(object? sender, EffectInitializationFailedEventArgs e)
-    {
-        DiagnosticText.Text = $"Sonnet OpenGL 初始化失败\n{e.Message}";
-        DiagnosticOverlay.IsVisible = true;
-    }
-
-    private void RefreshDiagnostic()
+    private void RefreshPresetDebug()
     {
 #if DEBUG
         var presetLabel = _scene?.ActivePresetDebugLabel;
@@ -319,65 +152,5 @@ public partial class SonnetNowPlayingThemeView : UserControl
         if (_presetDebugText.Text != presetLabel)
             _presetDebugText.Text = presetLabel;
 #endif
-        if (!string.IsNullOrWhiteSpace(EffectSurface.LastError))
-        {
-            DiagnosticOverlay.IsVisible = true;
-            DiagnosticText.Text = $"Sonnet OpenGL 渲染器不可用\n{EffectSurface.LastError}";
-            return;
-        }
-
-        if (EffectSurface.FrameStatistics.SubmittedFrames > 0)
-        {
-            DiagnosticOverlay.IsVisible = false;
-            return;
-        }
-
-        DiagnosticOverlay.IsVisible = true;
-        DiagnosticText.Text =
-            "Sonnet 尚未获得 OpenGL 渲染上下文。\n请完全退出并重新启动播放器；macOS 会按 OpenGL → Metal → Software 顺序选择后端。";
-    }
-
-    private static IReadOnlyList<SonnetLine> BuildLines(
-        IReadOnlyList<LyricLine> source,
-        double durationSeconds)
-    {
-        // Like Folia, a track without lyrics plays the La Folia staff instead of text.
-        if (source.Count == 0)
-            return SonnetStaffView.VirtualLines();
-
-        var result = new List<SonnetLine>(source.Count);
-        for (var index = 0; index < source.Count; index++)
-        {
-            var line = source[index];
-            if (string.IsNullOrWhiteSpace(line.Text))
-                continue;
-
-            var start = Math.Max(0, line.Start.TotalSeconds);
-            var end = line.Duration > TimeSpan.Zero
-                ? start + line.Duration.TotalSeconds
-                : index + 1 < source.Count
-                    ? Math.Max(start + 0.1, source[index + 1].Start.TotalSeconds)
-                    : Math.Max(start + 4, durationSeconds);
-            var words = line.Words.Select(word => new SonnetWordTiming(
-                word.Text,
-                Math.Max(start, word.Start.TotalSeconds),
-                Math.Max(start, word.Start.TotalSeconds) + Math.Max(0.01, word.Duration.TotalSeconds))).ToArray();
-            result.Add(new(line.Text, start, Math.Max(start + 0.1, end), words));
-        }
-
-        return result.Count > 0 ? result : SonnetStaffView.VirtualLines();
-    }
-
-    private static string ResolveTrackIdentity(SongItem? song)
-    {
-        if (song is null)
-            return "sonnet:empty";
-        if (!string.IsNullOrWhiteSpace(song.Hash))
-            return $"kugou:{song.Hash}";
-        if (!string.IsNullOrWhiteSpace(song.LocalFilePath))
-            return $"local:{song.LocalFilePath}";
-        if (song.AudioId != 0)
-            return $"audio:{song.AudioId}";
-        return $"metadata:{song.DisplayTitle}:{song.Singer}:{song.DurationSeconds:F3}";
     }
 }

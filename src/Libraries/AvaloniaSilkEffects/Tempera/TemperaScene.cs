@@ -180,7 +180,7 @@ internal sealed class TemperaSceneView : IDisposable
         var colors = LumiereKeywords.GlyphColors(line.Line.Text, matchers);
         var graphemeStarts = new List<int>();
         var cursor = 0;
-        foreach (var grapheme in LumiereReveal.Graphemes(line.Line.Text))
+        foreach (var grapheme in EffectTextMetrics.SplitGraphemes(line.Line.Text))
         {
             graphemeStarts.Add(cursor);
             cursor += grapheme.Length;

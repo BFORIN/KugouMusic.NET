@@ -17,16 +17,7 @@ public sealed class LumiereRng
     /// <summary>The same stream as <c>new LumiereRng(seed)</c>, starting after <paramref name="skip"/> values.</summary>
     public static LumiereRng At(string seed, int skip) => new(unchecked(Hash(seed) + (uint)skip * Increment));
 
-    public static uint Hash(string key)
-    {
-        var hash = 0x811c9dc5u;
-        foreach (var c in key)
-        {
-            hash ^= c;
-            hash = unchecked(hash * 16777619u);
-        }
-        return hash;
-    }
+    public static uint Hash(string key) => EffectMath.Hash(key);
 
     public double Next()
     {

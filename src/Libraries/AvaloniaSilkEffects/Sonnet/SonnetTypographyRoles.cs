@@ -87,8 +87,8 @@ public static class SonnetTypographyRoles
         // Compatibility for callers constructing semantic segments directly.
         // No dictionary load or guessed word-level time is needed here.
         if (!segment.IsWordLike || string.IsNullOrWhiteSpace(segment.Text)) return new SonnetEmphasis(0, 0, 0);
-        var language = segment.Text.EnumerateRunes().Any(SonnetTokenizer.IsKana) ? SonnetLanguage.Japanese
-            : segment.Text.EnumerateRunes().Any(SonnetTokenizer.IsHan) ? SonnetLanguage.Chinese : SonnetLanguage.English;
+        var language = segment.Text.EnumerateRunes().Any(EffectTextMetrics.IsKana) ? SonnetLanguage.Japanese
+            : segment.Text.EnumerateRunes().Any(EffectTextMetrics.IsHan) ? SonnetLanguage.Chinese : SonnetLanguage.English;
         var kind = SonnetFunctionWords.Classify(segment.Text.Trim(), language, SonnetLexicalKind.Other);
         return new SonnetEmphasis(SonnetFunctionWords.Priority(kind), 0, 1);
     }

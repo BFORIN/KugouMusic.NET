@@ -5,6 +5,7 @@ using ZLinq;
 using System.Linq;
 using System.Text;
 using AvaloniaLyrics;
+using AvaloniaSilkEffects;
 using SkiaSharp;
 
 namespace KugouAvaloniaPlayer.Controls;
@@ -639,14 +640,8 @@ internal static class FumeArticleLayoutEngine
         return result;
     }
 
-    internal static IReadOnlyList<string> SplitGraphemes(string text)
-    {
-        var result = new List<string>();
-        var enumerator = StringInfo.GetTextElementEnumerator(text);
-        while (enumerator.MoveNext())
-            result.Add(enumerator.GetTextElement());
-        return result;
-    }
+    internal static IReadOnlyList<string> SplitGraphemes(string text) =>
+        EffectTextMetrics.SplitGraphemes(text);
 
     private static bool ChooseNaturalHero(LyricLine line, int index, int total)
     {

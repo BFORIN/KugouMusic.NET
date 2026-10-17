@@ -9,38 +9,13 @@ public readonly record struct SonnetTransitionFrame(
 public static class SonnetMotion
 {
     public static readonly SonnetTransitionFrame IdleTransition = new(0, 0, 1, 0, 1, 0, 0, 0);
-    public static double Clamp01(double value) => Math.Clamp(value, 0, 1);
-
-    private static double Cubic(double p1, double p2, double time)
-    {
-        var inverse = 1 - time;
-        return 3 * inverse * inverse * time * p1 + 3 * inverse * time * time * p2 + time * time * time;
-    }
-
-    public static double CubicBezier(double x1, double y1, double x2, double y2, double value)
-    {
-        var target = Clamp01(value);
-        if (target is 0 or 1) return target;
-        var low = 0d;
-        var high = 1d;
-        var parameter = target;
-        for (var iteration = 0; iteration < 12; iteration++)
-        {
-            if (Cubic(x1, x2, parameter) < target) low = parameter;
-            else high = parameter;
-            parameter = (low + high) / 2;
-        }
-        return Cubic(y1, y2, parameter);
-    }
-
-    public static double EaseInOut(double value) => CubicBezier(0.65, 0, 0.35, 1, value);
-    public static double EaseEnter(double value) => CubicBezier(0.22, 1, 0.36, 1, value);
-    public static double ExpoOut(double value) => value == 1 ? 1 : 1 - Math.Pow(2, -10 * value);
-    public static double ElasticOut(double value)
-    {
-        const double period = 0.3;
-        return Math.Pow(2, -10 * value) * Math.Sin((value - period / 4) * (2 * Math.PI) / period) + 1;
-    }
+    public static double Clamp01(double value) => EffectMath.Clamp01(value);
+    public static double CubicBezier(double x1, double y1, double x2, double y2, double value) =>
+        EffectEasing.CubicBezier(x1, y1, x2, y2, value);
+    public static double EaseInOut(double value) => EffectEasing.EaseInOut(value);
+    public static double EaseEnter(double value) => EffectEasing.EaseEnter(value);
+    public static double ExpoOut(double value) => EffectEasing.ExpoOut(value);
+    public static double ElasticOut(double value) => EffectEasing.ElasticOut(value);
     public static double SegmentProgress(double start, double end, double time) =>
         ExpoOut(Clamp01((time - start) / Math.Max(end - start, 0.08)));
 
@@ -77,16 +52,12 @@ public static class SonnetMotion
 
     public static SonnetMotionFrame CameraBreath(double time, double phase = 0)
     {
-        var tau = time * Math.PI * 2;
-        return new SonnetMotionFrame(
-            (Math.Sin(tau * 0.13 + phase) * 0.65 + Math.Sin(tau * 0.31 + phase * 1.7) * 0.35) * 0.006,
-            (Math.Cos(tau * 0.11 + phase * 2.3) * 0.65 + Math.Sin(tau * 0.29 + phase * 0.9) * 0.35) * 0.006,
-            Math.Sin(tau * 0.09 + phase * 1.3) * 0.002,
-            Math.Sin(tau * 0.07 + phase * 2.9) * 0.0015);
+        var b = EffectCameraBreath.Calculate(time, phase);
+        return new SonnetMotionFrame(b.X, b.Y, b.Scale, b.Rotation);
     }
 
     public static double BreathWeight(double time, double revealDoneTime, double rampDuration = 1.2) =>
-        rampDuration <= 0 ? time >= revealDoneTime ? 1 : 0 : EaseInOut(Clamp01((time - revealDoneTime) / rampDuration));
+        EffectCameraBreath.Weight(time, revealDoneTime, rampDuration);
 
     public static IReadOnlyList<double> FocusWeights(IReadOnlyList<(double Start, double End)> ranges, double time, double sigma = 0.35)
     {
