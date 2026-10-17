@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace KuGou.Net.Abstractions.Models;
@@ -167,8 +168,9 @@ public record PrivilegeTransParam
     [property: JsonPropertyName("qualitymap")]
     public PrivilegeQualityMap? QualityMap { get; set; }
 
+    // bits 等扩展值可能是位串或超出 Int64 的数字，保留原始类型和精度。
     [property: JsonPropertyName("ipmap")]
-    public Dictionary<string, long>? IpMap { get; set; }
+    public Dictionary<string, JsonElement>? IpMap { get; set; }
 }
 
 public record PrivilegeQualityMap

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:KugouAvaloniaPlayer.Controls"
              xmlns:effects="using:AvaloniaSilkEffects"
              xmlns:vm="using:KugouAvaloniaPlayer.ViewModels"
              x:Class="KugouAvaloniaPlayer.Views.NowPlayingThemes.LumiereNowPlayingThemeView"
@@ -54,33 +55,10 @@
                        TextWrapping="Wrap" />
         </Border>
 
-        <Border Classes="LumiereGlass"
-                Padding="18,10"
-                Margin="0,0,0,26"
-                Width="390"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Bottom">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                <TextBlock Text="{Binding Player.CurrentPositionSeconds, Converter={StaticResource SecondsToTimeConverter}}"
-                           FontSize="11"
-                           FontFamily="Monospace"
-                           Foreground="#C8E8ECF3"
-                           VerticalAlignment="Center" />
-                <Slider Grid.Column="1"
-                        Minimum="0"
-                        Maximum="{Binding Player.TotalDurationSeconds}"
-                        Value="{Binding Player.CurrentPositionSeconds}"
-                        IsSnapToTickEnabled="False"
-                        Classes="Player PlayerDark PlayerCompact"
-                        VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2"
-                           Text="{Binding Player.TotalDurationSeconds, Converter={StaticResource SecondsToTimeConverter}}"
-                           FontSize="11"
-                           FontFamily="Monospace"
-                           Foreground="#C8E8ECF3"
-                           VerticalAlignment="Center" />
-            </Grid>
-        </Border>
+        <controls:FloatingPlayerBar Classes="Lumiere"
+                                    Margin="0,0,0,26"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom" />
 
         <Button Classes="Basic"
                 Cursor="Hand"

@@ -48,6 +48,11 @@
             ParallaxOriginX="{Binding PendoloParallaxTuning.OriginX}"
             ParallaxOriginY="{Binding PendoloParallaxTuning.OriginY}" />
 
+        <controls:FloatingPlayerBar Classes="Pendolo"
+                                    Margin="0,0,0,26"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Bottom" />
+
         <Button Classes="Basic"
                 Cursor="Hand"
                 Width="48"
