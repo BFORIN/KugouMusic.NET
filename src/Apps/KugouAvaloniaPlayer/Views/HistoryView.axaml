@@ -20,6 +20,7 @@
             PlayFirstCommand="{Binding PlayFirstCommand}"
             BackCommand="{Binding $parent[localControls:KugouWindow].((vm:MainWindowViewModel)DataContext).NavigateBackCommand}"
             ListMargin="0"
+            ShowAddLoadedSongsToQueueButton="True"
             HeroActionCommand="{Binding ClearHistoryCommand}"
             HeroActionSvgPath="/Assets/trash-svgrepo-com.svg" />
     </Grid>
