@@ -239,7 +239,7 @@
                     </StackPanel>
 
                     <Button Command="{Binding #Root.BackCommand}"
-                            Classes="Basic HeroIconButton"
+                            Classes="Basic HeroIconButton EscapeBackButton"
                             IsVisible="{Binding #Root.ShowBackButton}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Top"

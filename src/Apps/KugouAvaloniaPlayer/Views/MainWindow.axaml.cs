@@ -7,10 +7,13 @@ using ZLinq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using KugouAvaloniaPlayer.Models;
 using KugouAvaloniaPlayer.Services;
 using KugouAvaloniaPlayer.ViewModels;
 using KugouAvaloniaPlayer.Controls;
+using SukiUI.Dialogs;
 using Size = Avalonia.Size;
 
 namespace KugouAvaloniaPlayer.Views;
@@ -19,6 +22,7 @@ public partial class MainWindow : KugouWindow
 {
     private PixelPoint? _lastNormalPosition;
     private Size? _lastNormalSize;
+    private bool _isDialogOpen;
 
 #if KUGOU_WINDOWS
     private WindowsTaskbarThumbnailToolbar? _taskbarToolbar;
@@ -43,6 +47,37 @@ public partial class MainWindow : KugouWindow
     }
 
     public bool CanClose { get; set; }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        // Let focused controls handle Escape first, and never navigate behind a dialog.
+        if (e.Handled || e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None ||
+            DataContext is not MainWindowViewModel vm ||
+            _isDialogOpen)
+            return;
+
+        if (vm.NowPlaying.IsOpen)
+        {
+            if (vm.NowPlaying.CloseCommand.CanExecute(null))
+                vm.NowPlaying.CloseCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        foreach (var visual in this.GetVisualDescendants())
+        {
+            if (visual is Button { IsEffectivelyVisible: true, IsEffectivelyEnabled: true } button &&
+                button.Classes.Contains("EscapeBackButton") &&
+                button.Command is { } command && command.CanExecute(button.CommandParameter))
+            {
+                e.Handled = true;
+                command.Execute(button.CommandParameter);
+                return;
+            }
+        }
+    }
 
     private void ApplyLinuxSystemWindowDecorationsFallback()
     {
@@ -88,6 +123,9 @@ public partial class MainWindow : KugouWindow
 
     protected override void OnClosed(EventArgs e)
     {
+        if (DataContext is MainWindowViewModel vm)
+            UnsubscribeDialogEvents(vm);
+
 #if KUGOU_WINDOWS
         if (_taskbarPlayer != null)
         {
@@ -114,8 +152,30 @@ public partial class MainWindow : KugouWindow
     {
         base.OnPropertyChanged(change);
 
+        if (change.Property == DataContextProperty)
+        {
+            if (change.OldValue is MainWindowViewModel oldViewModel)
+                UnsubscribeDialogEvents(oldViewModel);
+            _isDialogOpen = false;
+            if (change.NewValue is MainWindowViewModel newViewModel)
+            {
+                newViewModel.DialogManager.OnDialogShown += OnDialogShown;
+                newViewModel.DialogManager.OnDialogDismissed += OnDialogDismissed;
+            }
+        }
+
         if (change.Property == BoundsProperty || change.Property == WindowStateProperty)
             CaptureNormalBounds();
+    }
+
+    private void OnDialogShown(object? sender, SukiDialogManagerEventArgs e) => _isDialogOpen = true;
+
+    private void OnDialogDismissed(object? sender, SukiDialogManagerEventArgs e) => _isDialogOpen = false;
+
+    private void UnsubscribeDialogEvents(MainWindowViewModel vm)
+    {
+        vm.DialogManager.OnDialogShown -= OnDialogShown;
+        vm.DialogManager.OnDialogDismissed -= OnDialogDismissed;
     }
 
     private void SaveWindowState()

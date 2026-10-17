@@ -5,7 +5,7 @@
     <suki:GlassCard Margin="16,16,16,100" Padding="24">
         <Grid RowDefinitions="Auto,*" RowSpacing="16">
             <StackPanel Spacing="8">
-                <Button Classes="Basic" Content="‹  播放与音效" Command="{Binding BackCommand}" HorizontalAlignment="Left" />
+                <Button Classes="Basic EscapeBackButton" Content="‹  播放与音效" ToolTip.Tip="返回播放与音效" Command="{Binding BackCommand}" HorizontalAlignment="Left" />
                 <TextBlock Text="均衡器" FontSize="24" FontWeight="Bold" />
                 <TextBlock Text="画出你喜欢的声音。按住并划过曲线，调整实时生效。" TextWrapping="Wrap" Foreground="{DynamicResource SukiLowText}" FontSize="12" />
             </StackPanel>

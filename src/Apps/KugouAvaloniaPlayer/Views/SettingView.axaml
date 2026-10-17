@@ -30,7 +30,7 @@
                         <ComboBox x:Name="CompactNavigation" Classes="SettingsCategoryPicker" IsVisible="False" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}">
                             <ComboBox.ItemTemplate><DataTemplate x:DataType="models:SettingsCategory"><TextBlock Text="{Binding Title}" /></DataTemplate></ComboBox.ItemTemplate>
                         </ComboBox>
-                        <Button Grid.Column="1" Classes="Basic" Content="返回" Command="{Binding $parent[local:KugouWindow].((vm:MainWindowViewModel)DataContext).NavigateBackCommand}" />
+                        <Button Grid.Column="1" Classes="Basic EscapeBackButton" Content="返回" ToolTip.Tip="返回" Command="{Binding $parent[local:KugouWindow].((vm:MainWindowViewModel)DataContext).NavigateBackCommand}" />
                     </Grid>
                     <ComboBox IsVisible="{Binding IsLyricsSection}" ItemsSource="{Binding LyricSections}" SelectedItem="{Binding SelectedLyricSection}" HorizontalAlignment="Left" MinWidth="160" />
                     <Border Height="1" Background="{DynamicResource SukiBorder}" />
