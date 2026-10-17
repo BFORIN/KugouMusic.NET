@@ -41,5 +41,13 @@ unaltered source-tag endpoints remain available as reliable pause anchors.
 Unknown Chinese emission characters stay intact. Chinese is the default for
 ambiguous all-Han text; `SonnetLine.LanguageHint` can override routing.
 
+Lexical words and display segments serve different purposes. Display grouping
+attaches function words to an adjacent content word (for example, `光` + `的`
+becomes `光的`, and `あなた` + `へ` becomes `あなたへ`), while preserving the
+original words and offsets in `LexicalWords`. The emphasis core excludes attached
+function words. A reliable pause of at least 300 ms prevents grouping across that
+boundary. Punctuation may attach to words; symbols such as emoji remain independent
+segments, and each complete emoji grapheme keeps its original timing.
+
 The resources and implementation are designed for AOT, but generation and
 ordinary compilation do not establish NativeAOT or visual-quality validation.

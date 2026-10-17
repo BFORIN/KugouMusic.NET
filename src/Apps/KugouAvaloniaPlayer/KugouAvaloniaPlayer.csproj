@@ -55,6 +55,7 @@
         <PackageReference Include="CommunityToolkit.Mvvm"/>
         <PackageReference Include="MemoryPack" />
         <PackageReference Include="Microsoft.Data.Sqlite" Condition="'$(UseSystemSqlite)' != 'true'" />
+        <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Condition="'$(UseSystemSqlite)' != 'true'" />
         <PackageReference Include="Microsoft.Data.Sqlite.Core" Condition="'$(UseSystemSqlite)' == 'true'" />
         <PackageReference Include="SQLitePCLRaw.bundle_sqlite3" Condition="'$(UseSystemSqlite)' == 'true'" />
         <!-- Keep the system SQLite provider explicitly versioned. -->

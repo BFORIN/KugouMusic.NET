@@ -227,7 +227,7 @@ xattr -dr com.apple.quarantine /Applications/KugouAvaloniaPlayer.app
 
 ## 本地开发
 
-项目仅支持 .NET 10，本地开发和 CI 均使用 .NET 10 SDK。仓库通过 `global.json` 选择已安装的稳定版 .NET 10 SDK。Windows 播放器目标为 `net10.0-windows10.0.19041.0`，其余项目及非 Windows 播放器目标为 `net10.0`。
+项目仅支持 .NET 10，建议本地开发安装稳定版 .NET 10 SDK，CI 使用 .NET 10 SDK。Windows 播放器目标为 `net10.0-windows10.0.19041.0`，其余项目及非 Windows 播放器目标为 `net10.0`。
 
 ```bash
 git clone https://github.com/Linsxyx/KugouMusic.NET.git
