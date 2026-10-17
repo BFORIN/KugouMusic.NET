@@ -103,7 +103,7 @@ public sealed class TemperaOpenGlTests
     [DllImport(Framework)] private static extern int CGLDestroyContext(nint context);
     [DllImport(Framework)] private static extern int CGLDestroyPixelFormat(nint format);
 
-    private static void WithGl(Action<GL> body)
+    internal static void WithGl(Action<GL> body)
     {
         var previous = CGLGetCurrentContext();
         Assert.Equal(0, CGLChoosePixelFormat([99, 0x4100, 73, 0], out var format, out _));
@@ -191,6 +191,44 @@ public sealed class TemperaOpenGlTests
         finally { scene.DisposeGpuResources(); }
     });
 
+    [MacOpenGlFact]
+    public void MetricsIncludeCustomDrawsUploadsAndReleaseAllGpuStorage() => WithGl(gl =>
+    {
+        var ledger = EffectGpuResources.For(gl);
+        using (var device = new EffectDevice(gl))
+        using (var target = new EffectFramebuffer(gl))
+        {
+            var size = new PixelSize(640, 360);
+            target.EnsureSize(size.Width, size.Height);
+            var scene = new TemperaEffectScene(new TemperaSongContext("metrics",
+                TemperaProgramCompiler.Compile(TemperaTests.SampleLines(), "metrics"),
+                TemperaTheme.MidnightDefault, new TemperaSongMetadata("metrics")));
+            scene.Initialize(device);
+            scene.Resize(size, 1);
+            try
+            {
+                device.Render(scene, new EffectFrame(TimeSpan.FromSeconds(2.6), TimeSpan.FromSeconds(1d / 60), size, 1, 0),
+                    (int)target.Framebuffer, Shell);
+                var metrics = device.FrameMetrics;
+                Assert.True(scene.LastDrawCalls > 0);
+                Assert.Equal(scene.LastDrawCalls + metrics.Flushes, metrics.DrawCalls);
+                Assert.True(metrics.UploadedBytes > device.Primitives.FrameUploadedBytes);
+                Assert.True(metrics.CreatedTextures > 0);
+                Assert.True(metrics.GpuResources.RenderTargets > 1);
+                Assert.True(metrics.GpuResources.BufferBytes > 0);
+                Assert.True(metrics.Timings.TextPreparationMilliseconds > 0);
+                Assert.True(metrics.Timings.PostProcessMilliseconds > 0);
+                var t = metrics.Timings;
+                // Stopwatch.GetElapsedTime rounds each interval to TimeSpan ticks independently.
+                Assert.InRange(Math.Abs(t.CpuMilliseconds - (t.PrepareMilliseconds + t.UpdateMilliseconds + t.DrawMilliseconds +
+                    t.PostProcessMilliseconds + t.CollectMilliseconds)), 0, 0.001);
+                Assert.Equal(GLEnum.NoError, gl.GetError());
+            }
+            finally { scene.DisposeGpuResources(); }
+        }
+        Assert.Equal(default, ledger.Snapshot);
+    });
+
     /// <summary>Frame cost at 2560 × 1440 (Retina, scale 2); runs only with TEMPERA_BENCH=1 and prints the timings.</summary>
     [MacOpenGlFact]
     public void BenchmarkRetinaFrames() => WithGl(gl =>
@@ -201,11 +239,13 @@ public sealed class TemperaOpenGlTests
         var size = new PixelSize(2560, 1440);
         target.EnsureSize(size.Width, size.Height);
         var program = TemperaProgramCompiler.Compile(TemperaTests.SampleLines(), "bench");
-        var scene = new TemperaEffectScene(new TemperaSongContext("bench", program, TemperaTheme.MidnightDefault, new TemperaSongMetadata("t")));
+        var scene = new TemperaEffectScene(new TemperaSongContext("bench", program, TemperaTheme.MidnightDefault, new TemperaSongMetadata("t")),
+            new TemperaSceneOptions { EnableTextPrewarm = Environment.GetEnvironmentVariable("EFFECT_TEXT_PREWARM") != "0" });
         scene.Initialize(device);
         scene.Resize(size, 2);
         try
         {
+            var report = new EffectBenchmarkReport();
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var frames = 0;
             var worst = 0d;
@@ -216,10 +256,13 @@ public sealed class TemperaOpenGlTests
                 device.Render(scene, new EffectFrame(TimeSpan.FromSeconds(t), TimeSpan.FromSeconds(1 / 30d), size, 2, 0), (int)target.Framebuffer, Shell);
                 gl.Finish();
                 var cost = watch.Elapsed.TotalMilliseconds - start;
+                report.Add(t, device, cost);
                 worst = Math.Max(worst, cost);
                 slow.Add((t, cost));
                 frames++;
             }
+            watch.Stop();
+            report.Write("tempera", device, size, 2);
             Console.WriteLine($"TEMPERA bench: {frames} frames, mean {watch.Elapsed.TotalMilliseconds / frames:F2} ms, worst {worst:F2} ms, draws {scene.LastDrawCalls}; slowest " +
                 string.Join(", ", slow.OrderByDescending(entry => entry.Ms).Take(8).Select(entry => $"{entry.T:F2}s={entry.Ms:F0}ms")));
         }

@@ -137,7 +137,7 @@ public sealed class LumiereOpenGlTests
     {
         const int width = 640, height = 400;
         using var device = new EffectDevice(gl);
-        using var target = new LumiereRenderTarget(gl);
+        using var target = new EffectColorTarget(gl);
         using var field = new LumiereLightField(gl);
         target.EnsureSize(width, height);
         target.Bind(clear: true);
@@ -287,11 +287,12 @@ public sealed class LumiereOpenGlTests
             ShowText = !variant.Contains("notext"),
         };
         var scene = new LumiereEffectScene(new LumiereSongContext("bench", program, CaptureTheme with { FontWeight = (int)Param("w", 600) }, new LumiereSongMetadata("夜航星", "Lumiere", "Capture")),
-            new LumiereSceneOptions { Tuning = tuning });
+            new LumiereSceneOptions { Tuning = tuning, EnableTextPrewarm = Environment.GetEnvironmentVariable("EFFECT_TEXT_PREWARM") != "0" });
         scene.Initialize(device);
         scene.Resize(size, 2);
         try
         {
+            var diagnostics = new EffectBenchmarkReport();
             var report = new List<string>();
             foreach (var start in new[] { 3.0, 14.0, 30.0 })
             {
@@ -304,6 +305,7 @@ public sealed class LumiereOpenGlTests
                 report.Add($"t={start}: {watch.Elapsed.TotalMilliseconds / frames:F2} ms/frame (cpu+gpu)");
             }
             File.WriteAllLines(Path.Combine(Path.GetTempPath(), "lumiere-bench.txt"), report);
+            diagnostics.Write("lumiere", device, size, 2);
             if (Environment.GetEnvironmentVariable("LUMIERE_CAPTURE_DIR") is { Length: > 0 } directory)
             {
                 Directory.CreateDirectory(directory);
@@ -315,8 +317,12 @@ public sealed class LumiereOpenGlTests
                     CaptureImages.Save(pixels, size, Path.Combine(directory, $"retina{variant}-{t:00}.png"));
                 }
             }
-            void Render(double t) => device.Render(scene, new EffectFrame(TimeSpan.FromSeconds(t), TimeSpan.FromSeconds(1 / 60d), size, 2, 0),
-                (int)target.Framebuffer, new EffectColor(0.051f, 0.071f, 0.208f));
+            void Render(double t)
+            {
+                device.Render(scene, new EffectFrame(TimeSpan.FromSeconds(t), TimeSpan.FromSeconds(1 / 60d), size, 2, 0),
+                    (int)target.Framebuffer, new EffectColor(0.051f, 0.071f, 0.208f));
+                diagnostics.Add(t, device);
+            }
         }
         finally { scene.DisposeGpuResources(); }
     });

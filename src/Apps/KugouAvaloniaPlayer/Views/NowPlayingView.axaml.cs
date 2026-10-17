@@ -34,6 +34,7 @@ public partial class NowPlayingView : UserControl
     public NowPlayingView()
     {
         InitializeComponent();
+        InitializePerformanceDiagnostics();
         DataContextChanged += OnDataContextChanged;
         BackgroundSourceImage.PropertyChanged += OnBackgroundSourceImagePropertyChanged;
     }
@@ -45,10 +46,12 @@ public partial class NowPlayingView : UserControl
         SynchronizeThemeContent();
         LayoutUpdated += OnLayoutUpdated;
         UpdateSharedBackgroundFrame();
+        _performanceTimer?.Start();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        _performanceTimer?.Stop();
         CancelPendingThemeUnload();
         CancelPendingBackgroundBlur();
         ClearCachedBackground();

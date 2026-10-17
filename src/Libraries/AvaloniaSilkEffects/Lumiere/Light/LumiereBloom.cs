@@ -108,8 +108,8 @@ internal sealed class LumiereBloom : IDisposable
     private readonly EffectShaderProgram _up;
     private readonly EffectShaderProgram _combine;
     private readonly uint _vao;
-    private readonly List<LumiereRenderTarget> _chain = [];
-    private readonly List<LumiereRenderTarget> _scratch = [];
+    private readonly List<EffectColorTarget> _chain = [];
+    private readonly List<EffectColorTarget> _scratch = [];
 
     public LumiereBloom(GL gl)
     {
@@ -126,10 +126,11 @@ internal sealed class LumiereBloom : IDisposable
     /// Blooms <paramref name="source"/> and composites it (premultiplied over) onto <paramref name="output"/>.
     /// <paramref name="map"/> maps the output's 0..1 uv onto the source's uv (crop of an overscanned group).
     /// </summary>
-    public void Apply(LumiereRenderTarget source, LumiereBinding output, LumiereBloomPreset preset, float strengthScale,
+    public void Apply(EffectColorTarget source, LumiereBinding output, LumiereBloomPreset preset, float strengthScale,
         Vector4 map, float alpha = 1, Vector3? tint = null)
     {
         var gl = _gl;
+        using var timing = EffectGpuResources.For(_gl).MeasurePostProcess();
         DrawCalls = 0;
         gl.Disable(EnableCap.Blend);
         gl.BindVertexArray(_vao);
@@ -199,9 +200,9 @@ internal sealed class LumiereBloom : IDisposable
         Draw();
     }
 
-    private LumiereRenderTarget Level(List<LumiereRenderTarget> list, int index)
+    private EffectColorTarget Level(List<EffectColorTarget> list, int index)
     {
-        while (list.Count <= index) list.Add(new LumiereRenderTarget(_gl));
+        while (list.Count <= index) list.Add(new EffectColorTarget(_gl));
         return list[index];
     }
 

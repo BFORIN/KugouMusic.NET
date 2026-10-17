@@ -63,15 +63,16 @@ internal sealed class LumiereCompositor : IDisposable
         _blit = new EffectShaderProgram(gl, Vertex, Blit, "lumiere-layer-blit");
         _gauss = new EffectShaderProgram(gl, Vertex, Gauss, "lumiere-layer-blur");
         _vao = gl.GenVertexArray();
-        Layer = new LumiereRenderTarget(gl);
-        _blurA = new LumiereRenderTarget(gl);
-        _blurB = new LumiereRenderTarget(gl);
+        Layer = new EffectColorTarget(gl);
+        _blurA = new EffectColorTarget(gl);
+        _blurB = new EffectColorTarget(gl);
     }
 
     /// <summary>The layer target a scene renders into before compositing (same size as the output).</summary>
-    public LumiereRenderTarget Layer { get; }
-    private readonly LumiereRenderTarget _blurA;
-    private readonly LumiereRenderTarget _blurB;
+    public EffectColorTarget Layer { get; }
+    public int DrawCalls { get; private set; }
+    private readonly EffectColorTarget _blurA;
+    private readonly EffectColorTarget _blurB;
 
     /// <summary>
     /// Composites <see cref="Layer"/> onto <paramref name="output"/>: alpha, scale about the center plus a vertical offset (as a
@@ -79,6 +80,8 @@ internal sealed class LumiereCompositor : IDisposable
     /// </summary>
     public void Composite(LumiereBinding output, float alpha, float scale, float blurPixels, float offsetY = 0)
     {
+        using var timing = EffectGpuResources.For(_gl).MeasurePostProcess();
+        DrawCalls = 0;
         var gl = _gl;
         gl.BindVertexArray(_vao);
         gl.ActiveTexture(TextureUnit.Texture0);
@@ -95,6 +98,7 @@ internal sealed class LumiereCompositor : IDisposable
             gl.Uniform1(_blit.Uniform("uAlpha"), 1f);
             gl.BindTexture(TextureTarget.Texture2D, Layer.Texture);
             gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            DrawCalls++;
             // Strength → sigma in half-resolution pixels.
             var sigma = blurPixels * 0.5f * 0.5f;
             _gauss.Use();
@@ -103,10 +107,12 @@ internal sealed class LumiereCompositor : IDisposable
             gl.Uniform2(_gauss.Uniform("uStep"), sigma / _blurA.Width, 0f);
             gl.BindTexture(TextureTarget.Texture2D, _blurA.Texture);
             gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            DrawCalls++;
             _blurA.Bind(false);
             gl.Uniform2(_gauss.Uniform("uStep"), 0f, sigma / _blurA.Height);
             gl.BindTexture(TextureTarget.Texture2D, _blurB.Texture);
             gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            DrawCalls++;
             source = _blurA.Texture;
         }
         output.Restore(gl);
@@ -120,6 +126,7 @@ internal sealed class LumiereCompositor : IDisposable
         gl.Uniform1(_blit.Uniform("uAlpha"), alpha);
         gl.BindTexture(TextureTarget.Texture2D, source);
         gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+        DrawCalls++;
     }
 
     public void Dispose()

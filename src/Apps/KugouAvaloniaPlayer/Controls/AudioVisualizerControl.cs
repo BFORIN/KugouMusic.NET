@@ -11,6 +11,8 @@ namespace KugouAvaloniaPlayer.Controls;
 
 public class AudioVisualizerControl : Control
 {
+    public AvaloniaSilkEffects.EffectCpuWorkMeter DrawingPerformance { get; } = new();
+
     public static readonly StyledProperty<PlayerViewModel?> PlayerProperty =
         AvaloniaProperty.Register<AudioVisualizerControl, PlayerViewModel?>(nameof(Player));
 
@@ -90,6 +92,7 @@ public class AudioVisualizerControl : Control
 
     public override void Render(DrawingContext context)
     {
+        using var timing = DrawingPerformance.Measure();
         var player = Player;
 
         var bands = player?.NowPlayingVisualizerBars;

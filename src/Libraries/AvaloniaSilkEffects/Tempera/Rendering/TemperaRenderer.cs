@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Diagnostics;
 using Silk.NET.OpenGL;
 using AvaloniaSilkEffects.Tempera.Text;
 
@@ -28,15 +29,19 @@ internal sealed class TemperaRenderer : IDisposable
     private readonly GL _gl;
     private readonly EffectPrimitiveRenderer _primitives;
     private readonly EffectTextureCache _textures;
+    private readonly TemperaGlyphCache _glyphs;
+    private readonly Stack<TemperaNode> _warmup = new();
+    private TemperaGroup? _warmupRoot;
+    private float _warmupScale;
     private readonly EffectShaderProgram _mesh;
     private readonly EffectShaderProgram _invert;
     private readonly Dictionary<TemperaPassKind, EffectShaderProgram> _passes = [];
     private readonly EffectShaderProgram _copy;
     private readonly uint _quadVao;
     private readonly uint _quadVbo;
-    private readonly TemperaTarget _text;
-    private readonly TemperaTarget _ping;
-    private readonly TemperaTarget _pong;
+    private readonly EffectColorTarget _text;
+    private readonly EffectColorTarget _ping;
+    private readonly EffectColorTarget _pong;
     private readonly Vector3[] _stops = new Vector3[4];
 
     public TemperaRenderer(GL gl, EffectPrimitiveRenderer primitives, EffectTextureCache textures)
@@ -44,6 +49,7 @@ internal sealed class TemperaRenderer : IDisposable
         _gl = gl;
         _primitives = primitives;
         _textures = textures;
+        _glyphs = new TemperaGlyphCache(textures);
         _mesh = new EffectShaderProgram(gl, TemperaShaders.MeshVertex, TemperaShaders.MeshFragment, "tempera-mesh");
         _invert = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.InvertFragment, "tempera-difference");
         _copy = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.CopyFragment, "tempera-copy");
@@ -55,9 +61,9 @@ internal sealed class TemperaRenderer : IDisposable
         var blur = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.BlurFragment, "tempera-blur");
         _passes[TemperaPassKind.BlurX] = blur;
         _passes[TemperaPassKind.BlurY] = blur;
-        _text = new TemperaTarget(gl);
-        _ping = new TemperaTarget(gl);
-        _pong = new TemperaTarget(gl);
+        _text = new EffectColorTarget(gl);
+        _ping = new EffectColorTarget(gl);
+        _pong = new EffectColorTarget(gl);
         unsafe
         {
             _quadVao = gl.GenVertexArray();
@@ -70,6 +76,8 @@ internal sealed class TemperaRenderer : IDisposable
             gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 2 * sizeof(float), (void*)0);
             gl.EnableVertexAttribArray(0);
             gl.BindVertexArray(0);
+            EffectGpuResources.For(gl).Buffer(_quadVbo, quad.Length * sizeof(float));
+            EffectGpuResources.For(gl).Uploaded(quad.Length * sizeof(float));
         }
     }
 
@@ -160,13 +168,65 @@ internal sealed class TemperaRenderer : IDisposable
     {
         if (text.Glyph is not { } glyph || glyph.Texture.IsDisposed || text.GlyphScale != rasterScale)
         {
-            glyph = TemperaGlyphs.Get(_textures, text.Text, text.FontFamily, text.FontWeight, text.FontSize, rasterScale, text.WrapWidth);
+            glyph = _glyphs.Get(text.Text, text.FontFamily, text.FontWeight, text.FontSize, rasterScale, text.WrapWidth);
             text.Glyph = glyph;
             text.GlyphScale = rasterScale;
         }
         _textures.Touch(glyph.Texture);
         var transform = Matrix3x2.CreateTranslation(-glyph.Center) * world;
         _primitives.DrawTexture(glyph.Texture, transform, glyph.Texture.LogicalSize, alpha, EffectBlendMode.Alpha, text.Color.ToEffect());
+    }
+
+    public void ResetWarmup()
+    {
+        _warmup.Clear();
+        _warmupRoot = null;
+    }
+
+    /// <returns>Whether this target still has work pending after the current frame's allowance.</returns>
+    public bool PrewarmText(TemperaGroup root, float rasterScale)
+    {
+        var resources = _textures.TextResources;
+        if (!EffectTextWarmup.CanStart(resources)) return true;
+        if (!ReferenceEquals(root, _warmupRoot) || rasterScale != _warmupScale)
+        {
+            _warmup.Clear();
+            _warmup.Push(root);
+            _warmupRoot = root;
+            _warmupScale = rasterScale;
+        }
+        using var timing = resources.MeasureTextStage(EffectTextStage.Warmup);
+        var started = Stopwatch.GetTimestamp();
+        while (_warmup.TryPop(out var node))
+        {
+            if (!EffectTextWarmup.CanStart(resources) || Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 1)
+            {
+                _warmup.Push(node);
+                return true;
+            }
+            // The target is a near-future shot: its nodes deliberately are not visible yet.
+            if (node is TemperaGroup group)
+                for (var index = group.Children.Count - 1; index >= 0; index--) _warmup.Push(group.Children[index]);
+            else if (node is TemperaText text)
+            {
+                if (text.Glyph is { } existing && !existing.Texture.IsDisposed && text.GlyphScale == rasterScale)
+                {
+                    _textures.Touch(existing.Texture);
+                    continue;
+                }
+                var bytes = _glyphs.EstimateBytes(text.Text, text.FontFamily, text.FontWeight, text.FontSize, text.WrapWidth, rasterScale);
+                if (!EffectTextWarmup.Fits(bytes, _textures)) continue;
+                if (!EffectTextWarmup.CanStart(resources) || Stopwatch.GetElapsedTime(started).TotalMilliseconds >= 1)
+                {
+                    _warmup.Push(node);
+                    return true;
+                }
+                text.Glyph = _glyphs.Get(text.Text, text.FontFamily, text.FontWeight, text.FontSize, rasterScale, text.WrapWidth);
+                text.GlyphScale = rasterScale;
+                if (resources.FrameCreatedTextures > 0) return _warmup.Count > 0;
+            }
+        }
+        return false;
     }
 
     // ---- The difference filter ------------------------------------------------------------------------------------------
@@ -193,7 +253,7 @@ internal sealed class TemperaRenderer : IDisposable
         double minX = double.PositiveInfinity, minY = double.PositiveInfinity, maxX = double.NegativeInfinity, maxY = double.NegativeInfinity;
         foreach (var (text, textWorld) in _layerTexts)
         {
-            var box = text.BoxSize ??= TemperaGlyphs.Box(text.Text, text.FontFamily, text.FontWeight, text.FontSize, text.WrapWidth);
+            var box = text.BoxSize ??= _glyphs.Box(text.Text, text.FontFamily, text.FontWeight, text.FontSize, text.WrapWidth);
             Span<Vector2> corners = [new(-box.X / 2, -box.Y / 2), new(box.X / 2, -box.Y / 2), new(box.X / 2, box.Y / 2), new(-box.X / 2, box.Y / 2)];
             foreach (var corner in corners)
             {
@@ -276,6 +336,7 @@ internal sealed class TemperaRenderer : IDisposable
     public void RunChain(TemperaSurface source, TemperaPixelRect frame, IReadOnlyList<TemperaPass> passes, TemperaSurface target)
     {
         _primitives.Flush();
+        using var timing = EffectGpuResources.For(_gl).MeasurePostProcess();
         var input = source.Resolve();
         var inputWidth = source.Width;
         var inputHeight = source.Height;
@@ -375,12 +436,15 @@ internal sealed class TemperaRenderer : IDisposable
 
     public void Dispose()
     {
+        ResetWarmup();
+        _glyphs.Clear();
         _mesh.Dispose();
         _invert.Dispose();
         _copy.Dispose();
         foreach (var shader in _passes.Values.Distinct()) shader.Dispose();
         _gl.DeleteVertexArray(_quadVao);
         _gl.DeleteBuffer(_quadVbo);
+        EffectGpuResources.For(_gl).ReleaseBuffer(_quadVbo);
         _text.Dispose();
         _ping.Dispose();
         _pong.Dispose();

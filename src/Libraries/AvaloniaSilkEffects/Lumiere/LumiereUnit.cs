@@ -17,6 +17,7 @@ public sealed class LumiereUnitOptions
     public required string Seed { get; init; }
     public required LumiereTheme Theme { get; init; }
     public LumiereSceneTuning Tuning { get; init; } = new();
+    public bool EnableTextPrewarm { get; init; } = true;
     public required IReadOnlyList<LumiereLine> Lines { get; init; }
     public required IReadOnlyList<LumiereShot> Shots { get; init; }
     public required double StartTime { get; init; }
@@ -34,7 +35,7 @@ public sealed class LumiereUnitOptions
     /// the scene's fade-out window, seeded by program seed and paragraph id.
     /// </summary>
     public static LumiereUnitOptions FromParagraph(LumiereProgram program, LumiereParagraph paragraph, LumiereTheme theme,
-        LumiereSceneTuning tuning)
+        LumiereSceneTuning tuning, bool enableTextPrewarm = true)
     {
         var local = paragraph.LineIndices.Select((lineIndex, index) => (lineIndex, index)).ToDictionary(item => item.lineIndex, item => item.index);
         var shots = paragraph.Shots.Select(shot => new LumiereShot(Rigs.LumiereCatalog.ProfileOf(shot.Kind), shot.StartTime, shot.EndTime,
@@ -46,6 +47,7 @@ public sealed class LumiereUnitOptions
             Seed = $"{program.Seed}:{paragraph.Id}",
             Theme = theme,
             Tuning = tuning,
+            EnableTextPrewarm = enableTextPrewarm,
             Lines = paragraph.Lines,
             Shots = shots,
             StartTime = paragraph.StartTime,
@@ -66,8 +68,8 @@ internal sealed class LumiereGpu(GL gl, EffectTextureCache textures) : IDisposab
     public LumiereBloom GraphicsBloom { get; } = new(gl);
     public LumiereBloom TextBloom { get; } = new(gl);
     public LumiereSprites Sprites { get; } = new(gl);
-    public LumiereRenderTarget GraphicsTarget { get; } = new(gl);
-    public LumiereRenderTarget TextTarget { get; } = new(gl);
+    public EffectColorTarget GraphicsTarget { get; } = new(gl);
+    public EffectColorTarget TextTarget { get; } = new(gl);
 
     public void Dispose()
     {
@@ -179,6 +181,8 @@ internal sealed class LumiereUnit : IDisposable
         // Text group: line i uses its shot's typography once current (lines outside any shot follow the previous shot).
         _lyrics = new LumiereLyricWindow(gpu.Gl, new LumiereLyricWindowOptions
         {
+            Textures = gpu.Textures,
+            EnableTextPrewarm = options.EnableTextPrewarm,
             Width = width,
             Height = height,
             Lines = options.Lines,
@@ -253,6 +257,8 @@ internal sealed class LumiereUnit : IDisposable
             if (_shots[i].StartTime <= time) index = i;
         return index;
     }
+
+    public void PrewarmText(double time) => _lyrics.PrewarmOne(time);
 
     public void Update(double time, LumiereAudioFrame audio)
     {
@@ -342,6 +348,7 @@ internal sealed class LumiereUnit : IDisposable
             tuning.TextOnly ? null : (root, viewport) =>
             {
                 gpu.LightField.Render(_field, root, viewport, _width, _height, _overscan);
+                primitives.RecordExternalDrawCalls(1);
                 _echo?.Draw(primitives, root, _time, _field.Beams, _palette.Light, Smooth(_local / 1.2) * _exit);
                 _starfall?.Draw(primitives, root, _local + _starOffset, _time, _field.Beams, _palette.Light, _exit);
                 if (tuning.LineArt) DrawLineArt(primitives, root);

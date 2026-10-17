@@ -100,6 +100,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         gl.EnableVertexAttribArray(3);
 
         _whiteTexture = gl.GenTexture();
+        EffectGpuResources.For(gl).Texture(_whiteTexture, 4);
         gl.BindTexture(TextureTarget.Texture2D, _whiteTexture);
         var white = 0xFFFFFFFFu;
         gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, 1, 1, 0,
@@ -383,6 +384,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
             {
                 _bufferCapacityBytes = GrowCapacity(uploadBytes);
                 _gl.BufferData(BufferTargetARB.ArrayBuffer, _bufferCapacityBytes, null, BufferUsageARB.StreamDraw);
+                EffectGpuResources.For(_gl).Buffer(_vbo, (long)_bufferCapacityBytes);
             }
             _gl.BufferSubData(BufferTargetARB.ArrayBuffer, 0, uploadBytes, vertices);
         }
@@ -390,6 +392,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         FrameDrawCalls++;
         FrameFlushes++;
         FrameUploadedBytes += (long)uploadBytes;
+        EffectGpuResources.For(_gl).Uploaded((long)uploadBytes);
         _vertices.Clear();
     }
 
@@ -477,6 +480,8 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         _shader.Dispose();
         _gl.DeleteTexture(_whiteTexture);
         _gl.DeleteBuffer(_vbo);
+        EffectGpuResources.For(_gl).ReleaseBuffer(_vbo);
+        EffectGpuResources.For(_gl).ReleaseTexture(_whiteTexture);
         _gl.DeleteVertexArray(_vao);
     }
 }

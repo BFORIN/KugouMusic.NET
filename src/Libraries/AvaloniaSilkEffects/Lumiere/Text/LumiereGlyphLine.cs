@@ -38,6 +38,8 @@ internal sealed partial class LumiereGlyphLine : IDisposable
     public LumiereGlyphLine(GL gl, string text, float fontPx, string fontFamily, int weight, float resolution,
         float letterSpacing = 0, float outline = 0, int maxCanvasPx = 8192)
     {
+        using var timing = EffectGpuResources.For(gl).MeasureTextPreparation();
+        var measureTiming = EffectGpuResources.For(gl).MeasureTextStage(EffectTextStage.Measure);
         Text = text;
         FontPx = fontPx;
         var graphemes = LumiereReveal.Graphemes(text);
@@ -63,6 +65,8 @@ internal sealed partial class LumiereGlyphLine : IDisposable
         var scale = MathF.Min(resolution, MathF.Min(maxCanvasPx / (width + pad * 2), maxCanvasPx / (height + pad * 2)));
         var canvasWidth = Math.Max(1, (int)MathF.Ceiling((width + pad * 2) * scale));
         var canvasHeight = Math.Max(1, (int)MathF.Ceiling((height + pad * 2) * scale));
+        measureTiming.Dispose();
+        var rasterTiming = EffectGpuResources.For(gl).MeasureTextStage(EffectTextStage.Raster);
         using var bitmap = new SKBitmap(new SKImageInfo(canvasWidth, canvasHeight, SKColorType.Rgba8888, SKAlphaType.Premul));
         using (var canvas = new SKCanvas(bitmap))
         {
@@ -91,6 +95,7 @@ internal sealed partial class LumiereGlyphLine : IDisposable
             if (spacing == 0) Draw(text, pad);
             else for (var index = 0; index < graphemes.Count; index++) Draw(graphemes[index], pad + offsets[index]);
         }
+        rasterTiming.Dispose();
         Texture = Upload(gl, bitmap, new Vector2(width + pad * 2, height + pad * 2));
 
         var totalWidth = width + pad * 2;
@@ -111,6 +116,19 @@ internal sealed partial class LumiereGlyphLine : IDisposable
         })];
     }
 
+    internal static long EstimateBytes(string text, float fontPx, string family, int weight, float resolution,
+        int graphemeCount, float letterSpacing)
+    {
+        using var font = new SKFont(EffectTextMetrics.GetTypeface(family, weight, text), fontPx)
+            { Edging = SKFontEdging.Antialias, Subpixel = true };
+        var width = MathF.Max(1, font.MeasureText(text) + letterSpacing * fontPx * graphemeCount);
+        var height = MathF.Ceiling(fontPx * 1.5f);
+        var pad = MathF.Ceiling(fontPx * 0.25f);
+        var scale = MathF.Min(resolution, MathF.Min(8192 / (width + pad * 2), 8192 / (height + pad * 2)));
+        return (long)Math.Max(1, (int)MathF.Ceiling((width + pad * 2) * scale)) *
+            Math.Max(1, (int)MathF.Ceiling((height + pad * 2) * scale)) * 4;
+    }
+
     public string Text { get; }
     public float FontPx { get; }
     /// <summary>Line width and height (logical px), without padding.</summary>
@@ -122,6 +140,7 @@ internal sealed partial class LumiereGlyphLine : IDisposable
 
     private static unsafe EffectTexture Upload(GL gl, SKBitmap bitmap, Vector2 logical)
     {
+        using var uploadTiming = EffectGpuResources.For(gl).MeasureTextStage(EffectTextStage.Upload);
         var handle = gl.GenTexture();
         gl.BindTexture(TextureTarget.Texture2D, handle);
         gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);

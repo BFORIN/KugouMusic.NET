@@ -16,6 +16,7 @@ public sealed class LumiereSceneOptions
     public LumiereSceneTuning Tuning { get; init; } = new() { Echo = 0, Trails = true, Bloom = 0.6f, TextBloom = 0.6f };
     /// <summary>Hard cuts between paragraphs (no transition frames).</summary>
     public bool StaticMode { get; init; }
+    public bool EnableTextPrewarm { get; init; } = true;
 }
 
 /// <summary>
@@ -32,8 +33,7 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
     private const double AudioAttack = 0.06;
     private const double AudioRelease = 0.25;
 
-    private readonly Dictionary<int, LumiereUnit> _cache = [];
-    private readonly List<LumiereUnit> _retired = [];
+    private readonly EffectParagraphCache<LumiereUnit> _cache = [];
     private readonly List<LumiereLayerFrame> _layers = [];
     private readonly LumiereOverlay _overlay = new();
     private LumiereGpu? _gpu;
@@ -46,6 +46,7 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
     private double _scaling = 1;
     private Vector2 _logical;
     private int _activeIndex = -1;
+    private double _time;
     private LumiereAudioFrame _smoothedAudio;
     private bool _audioPrimed;
 
@@ -100,15 +101,12 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
     private float Resolution => MathF.Min(2, MathF.Max(1, PixelScale));
 
     private LumiereUnit BuildUnit(LumiereSongContext context, int index) => new(
-        LumiereUnitOptions.FromParagraph(context.Program, context.Program.Paragraphs[index], context.Theme, Options.Tuning),
+        LumiereUnitOptions.FromParagraph(context.Program, context.Program.Paragraphs[index], context.Theme, Options.Tuning, Options.EnableTextPrewarm),
         _gpu!, _logical.X, _logical.Y, Resolution);
 
     private void ClearScenes()
     {
-        foreach (var unit in _cache.Values) unit.Dispose();
-        _cache.Clear();
-        foreach (var unit in _retired) unit.Dispose();
-        _retired.Clear();
+        _cache.Dispose();
         _activeIndex = -1;
     }
 
@@ -161,8 +159,7 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
         {
             Song = staged.Song;
             _pending = null;
-            _retired.AddRange(_cache.Values);
-            _cache.Clear();
+            _cache.RetireAll();
             _cache[staged.Index] = staged.Unit;
             _activeIndex = staged.Index;
             _staged = null;
@@ -187,7 +184,7 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
         // Lumiere has no global post-processing; its blooms live on its own groups. MSAA stays off like Pixi's antialias: false.
         Device.PostProcess.Reset();
         if (_gpu is null || _logical.X <= 1 && _logical.Y <= 1) return;
-        var time = frame.Elapsed.TotalSeconds;
+        var time = _time = frame.Elapsed.TotalSeconds;
         SampleAudio(frame.Delta.TotalSeconds);
         var swapped = AdvanceSongSwap(time);
         var program = Program;
@@ -220,19 +217,12 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
         if (!built && _staged is null)
         {
             // One expensive thing per frame: release a retired scene → prebuild the next → credits → prebuild the previous.
-            var next = activeIndex + 1;
-            var previous = activeIndex - 1;
-            if (_retired.Count > 0)
-            {
-                _retired[0].Dispose();
-                _retired.RemoveAt(0);
-            }
-            else if (next < program.Paragraphs.Count && !_cache.ContainsKey(next))
-                _cache[next] = BuildUnit(Song, next);
-            else if (hasCredits && _credits is null && time >= lyricEnd!.Value - CreditsPrebuild)
+            var work = _cache.NextWork(activeIndex, program.Paragraphs.Count,
+                hasCredits && _credits is null && time >= lyricEnd!.Value - CreditsPrebuild);
+            if (work.Kind == EffectCacheWorkKind.Paragraph)
+                _cache[work.Index] = BuildUnit(Song, work.Index);
+            else if (work.Kind == EffectCacheWorkKind.Credits)
                 BuildCredits();
-            else if (previous >= 0 && !_cache.ContainsKey(previous))
-                _cache[previous] = BuildUnit(Song, previous);
         }
         if (_creditsFrame.Active && _credits is null) BuildCredits();
 
@@ -279,6 +269,7 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
             unit.Render(_gpu, primitives, LayerBinding(), pixelScale);
             primitives.Flush();
             _compositor.Composite(output, alpha, (float)layer.Scale, blur * pixelScale);
+            primitives.RecordExternalDrawCalls(_compositor.DrawCalls);
         }
 
         if (_credits is not null && _creditsFrame.Active && _creditsFrame.PosterAlpha > 0.002)
@@ -286,6 +277,7 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
             _credits.Render(_gpu, primitives, LayerBinding(), pixelScale);
             primitives.Flush();
             _compositor.Composite(output, (float)_creditsFrame.PosterAlpha, (float)_creditsFrame.PosterScale, 0);
+            primitives.RecordExternalDrawCalls(_compositor.DrawCalls);
         }
 
         output.Restore(gl);
@@ -294,6 +286,13 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
             _overlay.Draw(primitives, _logical.X, _logical.Y, pixelScale,
                 LumierePalette.Resolve(Song.Theme, tuning.ThemeColorMix).Light);
         output.Restore(gl);
+        // Only the imminent cached paragraph, never an entire song. Visible text always has a synchronous fallback.
+        var next = _activeIndex + 1;
+        if (Options.EnableTextPrewarm && tuning.ShowText && next > 0 && next < Program.Paragraphs.Count &&
+            Program.Paragraphs[next].StartTime > _time &&
+            Program.Paragraphs[next].StartTime <= _time + EffectTextWarmup.LookAheadSeconds &&
+            EffectTextWarmup.CanStart(Device.Textures.TextResources) && _cache.TryGetValue(next, out var upcoming))
+            upcoming.PrewarmText(Program.Paragraphs[next].StartTime);
     }
 
     public override void DisposeGpuResources()

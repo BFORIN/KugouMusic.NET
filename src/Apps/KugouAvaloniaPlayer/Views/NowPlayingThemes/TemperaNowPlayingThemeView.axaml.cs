@@ -19,7 +19,7 @@ public partial class TemperaNowPlayingThemeView : UserControl
     {
         InitializeComponent();
         _coordinator = new SilkThemePlaybackCoordinator(
-            this, EffectSurface, "凝彩", DiagnosticOverlay, DiagnosticText, RebuildScene);
+            this, ThemeShell.Surface, "凝彩", ThemeShell.DiagnosticOverlay, ThemeShell.DiagnosticText, RebuildScene);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -39,7 +39,7 @@ public partial class TemperaNowPlayingThemeView : UserControl
     {
         var song = player.DisplayedPlayingSong ?? player.CurrentPlayingSong;
         var identity = NowPlayingThemeHelper.ResolveTrackIdentity(song, "tempera");
-        var lines = NowPlayingThemeHelper.BuildLumiereLines(player.RenderLyricLines, player.TotalDurationSeconds);
+        var lines = _coordinator.Lyrics.LumiereLines;
         // Like Folia, a track without lyrics runs on virtual ♪ lines so the compositions keep cutting.
         var program = TemperaProgramCompiler.Compile(lines.Count > 0 ? lines : TemperaProgramCompiler.InstrumentalLines(), identity);
         var color = viewModel.LyricColor;
@@ -50,12 +50,12 @@ public partial class TemperaNowPlayingThemeView : UserControl
         if (_scene is null)
         {
             _scene = new TemperaEffectScene(context);
-            EffectSurface.Scene = _scene;
+            ThemeShell.Surface.Scene = _scene;
         }
         else
             _scene.SetSong(context);
 
         _coordinator.SynchronizePlaybackClock();
-        EffectSurface.RenderOnce();
+        ThemeShell.Surface.RenderOnce();
     }
 }

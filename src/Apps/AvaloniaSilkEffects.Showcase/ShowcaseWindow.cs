@@ -150,14 +150,8 @@ internal sealed class ShowcaseWindow : Window
         if (stats.SubmittedFrames == 0)
             return;
 
-        _performance.Text =
-            $"{stats.FramesPerSecond,5:F1} FPS   CPU {stats.CpuMilliseconds,5:F2} ms\n" +
-            $"{stats.FramebufferSize.Width}×{stats.FramebufferSize.Height} px   " +
-            $"draw {stats.DrawCalls} / flush {stats.Flushes}\n" +
-            $"upload {stats.UploadedBytes / 1024d:F1} KiB   " +
-            $"post {(stats.PostProcessingEnabled ? "on" : "bypass")}   MSAA {stats.MultisampleCount}x\n" +
-            $"textures {stats.ResidentTextures} / {stats.ResidentTextureBytes / 1048576d:F1} MiB\n" +
-            $"{stats.OpenGlVersion}\n{stats.Renderer}";
+        _performance.Text = EffectPerformanceReport.Format("Scene", stats, _surface.Performance.Snapshot()) +
+            $"\n{stats.OpenGlVersion}\n{stats.Renderer}";
         if (_scene is SonnetShowcaseScene)
             _status.Text = _scene.Name;
     }

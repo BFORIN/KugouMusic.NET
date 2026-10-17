@@ -8,10 +8,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using AvaloniaLyrics;
 using AvaloniaSilkEffects;
-using AvaloniaSilkEffects.Lumiere;
-using AvaloniaSilkEffects.Sonnet;
 using KugouAvaloniaPlayer.Models;
 using KugouAvaloniaPlayer.ViewModels;
 
@@ -39,6 +36,7 @@ public sealed class SilkThemePlaybackCoordinator
     private NowPlayingViewModel? _viewModel;
     private PlayerViewModel? _player;
     private bool _sceneBuildQueued;
+    private NowPlayingLyricSnapshot? _lyricsSnapshot;
     private double _lastSyncedPositionSeconds = double.NegativeInfinity;
     private long _lastSyncTimestamp;
     private bool _lastSyncPaused = true;
@@ -69,6 +67,9 @@ public sealed class SilkThemePlaybackCoordinator
             DispatcherPriority.Background,
             (_, _) => RefreshDiagnostic());
     }
+
+    internal NowPlayingLyricSnapshot Lyrics => _lyricsSnapshot ??= new(
+        _player?.RenderLyricLines.ToArray() ?? [], _player?.TotalDurationSeconds ?? 0);
 
     public PlayerViewModel? Player => _player;
     public NowPlayingViewModel? ViewModel => _viewModel;
@@ -131,6 +132,7 @@ public sealed class SilkThemePlaybackCoordinator
 
         _player = null;
         _viewModel = null;
+        _lyricsSnapshot = null;
     }
 
     private void OnVisualizerUpdated() => _onVisualizerUpdated?.Invoke();
@@ -147,6 +149,7 @@ public sealed class SilkThemePlaybackCoordinator
             nameof(PlayerViewModel.DisplayedPlayingSong) or
             nameof(PlayerViewModel.TotalDurationSeconds))
         {
+            _lyricsSnapshot = null;
             QueueSceneBuild();
             return;
         }
@@ -158,7 +161,11 @@ public sealed class SilkThemePlaybackCoordinator
         }
     }
 
-    private void OnLyricsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => QueueSceneBuild();
+    private void OnLyricsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _lyricsSnapshot = null;
+        QueueSceneBuild();
+    }
 
     public void QueueSceneBuild()
     {
@@ -170,7 +177,10 @@ public sealed class SilkThemePlaybackCoordinator
         {
             _sceneBuildQueued = false;
             if (_view.IsAttachedToVisualTree() && _player is not null && _viewModel is not null)
+            {
+                using var timing = _surface.SceneBuildPerformance.Measure();
                 _rebuildScene(_player, _viewModel);
+            }
         }, DispatcherPriority.Background);
     }
 
@@ -269,65 +279,6 @@ public static class NowPlayingThemeHelper
         if (song.AudioId != 0)
             return $"audio:{song.AudioId}";
         return $"metadata:{song.DisplayTitle}:{song.Singer}:{song.DurationSeconds:F3}";
-    }
-
-    /// <summary>
-    /// 将播放器通用歌词集合转为 LumiereLine 数组（携带逐词毫秒时序）。
-    /// </summary>
-    public static IReadOnlyList<LumiereLine> BuildLumiereLines(IReadOnlyList<LyricLine> source, double durationSeconds)
-    {
-        var result = new List<LumiereLine>(source.Count);
-        for (var index = 0; index < source.Count; index++)
-        {
-            var line = source[index];
-            if (string.IsNullOrWhiteSpace(line.Text))
-                continue;
-
-            var start = Math.Max(0, line.Start.TotalSeconds);
-            var end = line.Duration > TimeSpan.Zero
-                ? start + line.Duration.TotalSeconds
-                : index + 1 < source.Count
-                    ? Math.Max(start + 0.1, source[index + 1].Start.TotalSeconds)
-                    : Math.Max(start + 4, durationSeconds);
-            var words = line.Words.Select(word => new LumiereWord(
-                word.Text,
-                Math.Max(start, word.Start.TotalSeconds),
-                Math.Max(start, word.Start.TotalSeconds) + Math.Max(0.01, word.Duration.TotalSeconds))).ToArray();
-            result.Add(new LumiereLine(line.Text, start, Math.Max(start + 0.1, end), words));
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// 将播放器通用歌词集合转为 SonnetLine 数组（无歌词时自动回退为虚拟乐谱线）。
-    /// </summary>
-    public static IReadOnlyList<SonnetLine> BuildSonnetLines(IReadOnlyList<LyricLine> source, double durationSeconds)
-    {
-        if (source.Count == 0)
-            return SonnetStaffView.VirtualLines();
-
-        var result = new List<SonnetLine>(source.Count);
-        for (var index = 0; index < source.Count; index++)
-        {
-            var line = source[index];
-            if (string.IsNullOrWhiteSpace(line.Text))
-                continue;
-
-            var start = Math.Max(0, line.Start.TotalSeconds);
-            var end = line.Duration > TimeSpan.Zero
-                ? start + line.Duration.TotalSeconds
-                : index + 1 < source.Count
-                    ? Math.Max(start + 0.1, source[index + 1].Start.TotalSeconds)
-                    : Math.Max(start + 4, durationSeconds);
-            var words = line.Words.Select(word => new SonnetWordTiming(
-                word.Text,
-                Math.Max(start, word.Start.TotalSeconds),
-                Math.Max(start, word.Start.TotalSeconds) + Math.Max(0.01, word.Duration.TotalSeconds))).ToArray();
-            result.Add(new(line.Text, start, Math.Max(start + 0.1, end), words));
-        }
-
-        return result.Count > 0 ? result : SonnetStaffView.VirtualLines();
     }
 
     /// <summary>

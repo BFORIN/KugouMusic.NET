@@ -9,6 +9,8 @@ internal readonly record struct LumiereSlot(double Dx, double Dy, double Scale, 
 
 internal sealed class LumiereLyricWindowOptions
 {
+    public required EffectTextureCache Textures { get; init; }
+    public bool EnableTextPrewarm { get; init; } = true;
     public required double Width { get; init; }
     public required double Height { get; init; }
     public required IReadOnlyList<LumiereLine> Lines { get; init; }
@@ -104,6 +106,7 @@ internal sealed class LumiereLyricWindow : IDisposable
     private readonly double _columnCap;
     private readonly LumiereTextMeasurer _measurer;
     private readonly LineMeta[] _metas;
+    private readonly long[] _estimatedTextureBytes;
     private readonly LineView?[] _views;
     private readonly List<int> _built = [];
     private readonly Dictionary<(int, int, LumiereTypography), LumiereSlot> _slotCache = [];
@@ -197,6 +200,7 @@ internal sealed class LumiereLyricWindow : IDisposable
             offset += graphemes.Count * GlyphRandomDraws + LineRandomDraws;
             return meta;
         })];
+        _estimatedTextureBytes = new long[_metas.Length];
         _views = new LineView?[_metas.Length];
         _frameTransforms = new LineTransform?[_metas.Length];
     }
@@ -812,9 +816,38 @@ internal sealed class LumiereLyricWindow : IDisposable
         for (var index = high + 1; index <= Math.Min(LineCount - 1, high + Prebuild); index++)
         {
             if (_views[index] is not null) continue;
-            Build(index);
+            if (_options.EnableTextPrewarm) TryPrewarmLine(index);
+            else Build(index);
             return;
         }
+    }
+
+    public void PrewarmOne(double time)
+    {
+        var (_, low, high) = ActiveRange(time);
+        for (var index = low; index <= Math.Min(LineCount - 1, high + Prebuild); index++)
+        {
+            if (_views[index] is not null) continue;
+            TryPrewarmLine(index);
+            return;
+        }
+    }
+
+    private void TryPrewarmLine(int index)
+    {
+        var resources = _options.Textures.TextResources;
+        if (!EffectTextWarmup.CanStart(resources)) return;
+        using var warmup = resources.MeasureTextStage(EffectTextStage.Warmup);
+        var bytes = _estimatedTextureBytes[index];
+        if (bytes == 0)
+        {
+            using (resources.MeasureTextPreparation())
+            using (resources.MeasureTextStage(EffectTextStage.Measure))
+                bytes = _estimatedTextureBytes[index] = LumiereGlyphLine.EstimateBytes(_metas[index].Line.Text,
+                    (float)(_heroPx * LumiereWordStyle.MaxWordScale), _options.Font, _options.Weight,
+                    _options.Resolution, _metas[index].Graphemes.Count, (float)_options.LetterSpacing);
+        }
+        if (EffectTextWarmup.CanStart(resources) && EffectTextWarmup.Fits(bytes, _options.Textures)) Build(index);
     }
 
     // ---- spot -------------------------------------------------------------------------------------------------

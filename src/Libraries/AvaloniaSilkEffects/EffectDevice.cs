@@ -1,4 +1,5 @@
 using Avalonia;
+using System.Diagnostics;
 using Silk.NET.OpenGL;
 
 namespace AvaloniaSilkEffects;
@@ -39,11 +40,17 @@ public sealed class EffectDevice : IDisposable
         IEffectScene scene,
         in EffectFrame frame,
         int targetFramebuffer,
-        EffectColor clearColor)
+        EffectColor clearColor,
+        double prepareMilliseconds = 0, long prepareAllocatedBytes = 0)
     {
         ThrowIfDisposed();
+        var started = Stopwatch.GetTimestamp();
+        var allocated = GC.GetAllocatedBytesForCurrentThread();
+        var resources = EffectGpuResources.For(Gl);
+        resources.BeginFrame();
         Textures.BeginFrame();
         scene.Update(frame);
+        var updated = Stopwatch.GetTimestamp();
         var postProcessingEnabled = PostProcess.IsEnabled;
         Gl.Disable(EnableCap.DepthTest);
         Gl.Disable(EnableCap.CullFace);
@@ -56,17 +63,33 @@ public sealed class EffectDevice : IDisposable
         _renderContext.PixelSize = frame.PixelSize;
         scene.Render(_renderContext);
         Primitives.Flush();
+        var drawn = Stopwatch.GetTimestamp();
         _postProcessPipeline.End(targetFramebuffer, PostProcess);
+        var postProcessed = Stopwatch.GetTimestamp();
         Textures.Collect();
+        var collected = Stopwatch.GetTimestamp();
+        var timings = new EffectFrameTimings(prepareMilliseconds,
+            Stopwatch.GetElapsedTime(started, updated).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(updated, drawn).TotalMilliseconds - resources.FrameCustomPostMilliseconds,
+            Stopwatch.GetElapsedTime(drawn, postProcessed).TotalMilliseconds + resources.FrameCustomPostMilliseconds,
+            Stopwatch.GetElapsedTime(postProcessed, collected).TotalMilliseconds,
+            resources.FrameTextPreparationMilliseconds,
+            prepareMilliseconds + Stopwatch.GetElapsedTime(started, collected).TotalMilliseconds,
+            prepareAllocatedBytes + GC.GetAllocatedBytesForCurrentThread() - allocated)
+        { TextWork = resources.TextWork };
         FrameMetrics = new EffectDeviceFrameMetrics(
             Primitives.FrameDrawCalls + _postProcessPipeline.FrameDrawCalls,
             Primitives.FrameFlushes,
-            Primitives.FrameUploadedBytes,
+            resources.FrameUploadedBytes,
             postProcessingEnabled,
             Textures.Count,
             Textures.ResidentBytes)
         {
             MultisampleCount = _postProcessPipeline.MultisampleCount,
+            Timings = timings,
+            GpuResources = resources.Snapshot,
+            CreatedTextures = resources.FrameCreatedTextures,
+            ReleasedTextures = resources.FrameReleasedTextures,
         };
     }
 
@@ -88,6 +111,7 @@ public sealed class EffectDevice : IDisposable
             return;
         _disposed = true;
         Textures.Abandon();
+        EffectGpuResources.For(Gl).Abandon();
     }
 }
 
@@ -100,4 +124,8 @@ public readonly record struct EffectDeviceFrameMetrics(
     long ResidentTextureBytes)
 {
     public int MultisampleCount { get; init; } = 1;
+    public EffectFrameTimings Timings { get; init; }
+    public EffectGpuResourceStatistics GpuResources { get; init; }
+    public int CreatedTextures { get; init; }
+    public int ReleasedTextures { get; init; }
 }

@@ -35,7 +35,7 @@ internal static class LumiereGroups
             var map = new Vector4(width * scale / target.Width, height * scale / target.Height,
                 overscan * scale / target.Width, overscan * scale / target.Height);
             gpu.GraphicsBloom.Apply(target, output, LumiereBloomPreset.Graphics, tuning.Bloom, map);
-            primitives.RecordExternalDrawCalls(gpu.GraphicsBloom.DrawCalls + 1);
+            primitives.RecordExternalDrawCalls(gpu.GraphicsBloom.DrawCalls);
         }
 
         if (text is not null)
@@ -49,7 +49,7 @@ internal static class LumiereGroups
             primitives.Flush();
             var map = new Vector4(width * groupScale / target.Width, height * groupScale / target.Height, 0, 0);
             gpu.TextBloom.Apply(target, output, LumiereBloomPreset.Text, tuning.TextBloom, map);
-            primitives.RecordExternalDrawCalls(gpu.TextBloom.DrawCalls + 1);
+            primitives.RecordExternalDrawCalls(gpu.TextBloom.DrawCalls);
         }
 
         primitives.SetViewport(targetViewport);

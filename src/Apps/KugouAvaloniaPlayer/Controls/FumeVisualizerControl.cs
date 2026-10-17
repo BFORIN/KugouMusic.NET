@@ -16,6 +16,8 @@ namespace KugouAvaloniaPlayer.Controls;
 // Folia's Fume visualizer expressed as an immutable article layout plus a moving camera.
 public sealed class FumeVisualizerControl : SilkEffectControl
 {
+    public AvaloniaSilkEffects.EffectCpuWorkMeter PreparationPerformance { get; } = new();
+
     private const double CameraScaleMin = 0.22;
     private const double CameraScaleMax = 2.24;
     private static readonly TimeSpan LayoutRebuildDelay = TimeSpan.FromMilliseconds(96);
@@ -88,16 +90,13 @@ public sealed class FumeVisualizerControl : SilkEffectControl
     private PlayerViewModel? _subscribedPlayer;
     private FumeArticleLayout? _article;
     private IReadOnlyList<FumeBackgroundShape> _backgroundShapes = [];
-    private Size _layoutViewport;
-    private string _layoutFont = string.Empty;
-    private double _layoutHeroScale;
-    private int _layoutLyricsSignature;
     private DateTimeOffset _layoutRebuildAt;
     private bool _layoutDirty = true;
     private bool _frameQueued;
     private bool _hasFrameTimestamp;
     private TimeSpan _lastFrameTimestamp;
     private int _settleFrames;
+    private FumeAudioEnergy _lastPublishedEnergy;
 
     private double _cameraX;
     private double _cameraY;
@@ -282,7 +281,6 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             change.Property == CameraSpeedProperty || change.Property == CameraTrackingModeProperty)
         {
             _settleFrames = Math.Max(_settleFrames, 45);
-            PublishFrame();
             RequestNextFrame();
         }
         if (change.Property == IsActiveProperty && change.NewValue is false)
@@ -300,6 +298,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
 
     private void PublishFrame()
     {
+        using var timing = PreparationPerformance.Measure();
         if (!IsRenderingActive)
             return;
         if (Bounds.Width <= 1 || Bounds.Height <= 1 || Player == null || !IsActive)
@@ -309,7 +308,6 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             return;
         }
 
-        EnsureArticle();
         var article = _article;
         if (article == null)
         {
@@ -320,6 +318,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
 
         var player = Player;
         var seconds = player.CurrentPositionSeconds;
+        _lastPublishedEnergy = ResolveEnergy(player);
         var overview = ShouldShowOverview(article, seconds);
         if (!_hasFrameTimestamp)
             SnapCameraIfUninitialized(
@@ -327,7 +326,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         _fumeScene.Publish(new Rect(Bounds.Size), new FumeFrame(
             article, _backgroundShapes, seconds, player.CurrentLyricIndex,
             _lastFrameTimestamp.TotalSeconds, _cameraX, _cameraY, _cameraScale,
-            ResolveEnergy(player), Math.Clamp(BackgroundObjectOpacity, 0, 1),
+            _lastPublishedEnergy, Math.Clamp(BackgroundObjectOpacity, 0, 1),
             Math.Clamp(TextHoldRatio, 0, 1), Math.Clamp(GlowIntensity, 0, 1.8),
             LyricFontFamily.ToString(), overview)
         {
@@ -343,36 +342,15 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         if (player == null)
             return;
 
-        var viewport = Bounds.Size;
-        var font = LyricFontFamily.ToString();
-        var signature = ComputeLyricsSignature(player);
-        var heroScale = Math.Clamp(HeroScale, 0.82, 1.32);
-        var layoutInputsChanged =
-            viewport != _layoutViewport ||
-            !string.Equals(font, _layoutFont, StringComparison.Ordinal) ||
-            signature != _layoutLyricsSignature ||
-            Math.Abs(heroScale - _layoutHeroScale) > 0.0001;
-        if (layoutInputsChanged && !_layoutDirty)
-        {
-            // EnsureArticle can run inside Render. Updating the internal dirty state is
-            // safe there, but invalidating the visual again would re-enter the render pass.
-            // Only start the debounce window once; moving it on every animation frame can
-            // postpone a lyric rebuild forever while playback keeps rendering.
-            _layoutDirty = true;
-            _layoutRebuildAt = _article != null
-                ? DateTimeOffset.UtcNow + LayoutRebuildDelay
-                : DateTimeOffset.MinValue;
-        }
-
-        if (!_layoutDirty ||
-            _article != null && DateTimeOffset.UtcNow < _layoutRebuildAt)
+        // Property changes and immutable lyric collection replacements mark the layout dirty.
+        // Keep the debounce deadline fixed while a resize is waiting to rebuild.
+        if (!_layoutDirty || _article != null && DateTimeOffset.UtcNow < _layoutRebuildAt)
             return;
 
+        var viewport = Bounds.Size;
+        var font = LyricFontFamily.ToString();
+        var heroScale = Math.Clamp(HeroScale, 0.82, 1.32);
         _layoutDirty = false;
-        _layoutViewport = viewport;
-        _layoutFont = font;
-        _layoutLyricsSignature = signature;
-        _layoutHeroScale = heroScale;
         _article = FumeArticleLayoutEngine.Build(
             player.RenderLyricLines,
             viewport.Width,
@@ -391,7 +369,6 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             ? DateTimeOffset.UtcNow + LayoutRebuildDelay
             : DateTimeOffset.MinValue;
         _settleFrames = Math.Max(_settleFrames, 12);
-        PublishFrame();
         RequestNextFrame();
     }
 
@@ -429,7 +406,6 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             nameof(PlayerViewModel.IsPlayingAudio))
         {
             _settleFrames = Math.Max(_settleFrames, 45);
-            PublishFrame();
             RequestNextFrame();
         }
     }
@@ -441,9 +417,11 @@ public sealed class FumeVisualizerControl : SilkEffectControl
 
     private void OnVisualizerUpdated()
     {
-        if (!IsActive)
+        if (!IsActive || Player is not { } player)
             return;
-        PublishFrame();
+        if (!player.IsPlayingAudio && ResolveEnergy(player) == _lastPublishedEnergy)
+            return;
+        _settleFrames = Math.Max(_settleFrames, 1);
         RequestNextFrame();
     }
 
@@ -470,6 +448,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
 
     private void OnAnimationFrame(TimeSpan timestamp)
     {
+        using var timing = PreparationPerformance.Measure();
         _frameQueued = false;
         if (!IsRenderingActive || !IsActive || Player == null)
         {
@@ -507,7 +486,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         _hasFrameTimestamp = false;
         if (IsRenderingActive)
         {
-            PublishFrame();
+            _settleFrames = Math.Max(_settleFrames, 1);
             RequestNextFrame();
         }
     }
@@ -783,20 +762,6 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             return false;
         var start = last.Line.Start.TotalSeconds;
         return currentSeconds >= start + Math.Max(last.Line.Duration.TotalSeconds, 0) * 0.5;
-    }
-
-    private static int ComputeLyricsSignature(PlayerViewModel player)
-    {
-        var hash = new HashCode();
-        hash.Add(player.RenderLyricLines.Count);
-        foreach (var line in player.RenderLyricLines)
-        {
-            hash.Add(line.Text);
-            hash.Add(line.Start);
-            hash.Add(line.Duration);
-            hash.Add(line.Words.Count);
-        }
-        return hash.ToHashCode();
     }
 
     private static FumeAudioEnergy ResolveEnergy(PlayerViewModel player)

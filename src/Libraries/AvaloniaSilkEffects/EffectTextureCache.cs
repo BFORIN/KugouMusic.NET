@@ -1,9 +1,7 @@
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SkiaSharp;
 using Silk.NET.OpenGL;
-using ZLinq;
 
 namespace AvaloniaSilkEffects;
 
@@ -15,9 +13,11 @@ public sealed class EffectTextureCache : IDisposable
     private readonly Dictionary<TextTextureKey, EffectTexture> _textTextures = [];
     private readonly Dictionary<LayeredTextTextureKey, EffectTexture> _layeredTextTextures = [];
     private readonly Dictionary<VectorTextureKey, EffectTexture> _vectorTextures = [];
-    private readonly List<EffectTexture> _ownedTextures = [];
-    private readonly List<EffectTexture> _sweepBuffer = [];
-    private readonly Dictionary<EffectTexture, ulong> _lastUsedFrame = [];
+    private readonly Dictionary<EffectTexture, LinkedListNode<CacheEntry>> _ownedTextures = [];
+    private readonly LinkedList<CacheEntry> _leastRecentlyUsed = new();
+    private readonly record struct CacheEntry(EffectTexture Texture, object? Key, ulong LastUsedFrame);
+    private bool _collectionPending;
+    internal const int CollectionBatchSize = 16;
     private ulong _frame;
     private ulong _lastCollectFrame;
     private long _residentBytes;
@@ -41,6 +41,10 @@ public sealed class EffectTextureCache : IDisposable
 
     internal EffectTextureCache(GL gl) => _gl = gl;
 
+    internal EffectGpuResources TextResources => EffectGpuResources.For(_gl);
+
+    internal EffectGpuResources.TimingScope MeasureTextPreparation() => EffectGpuResources.For(_gl).MeasureTextPreparation();
+
     public int Count => _ownedTextures.Count;
     public long ResidentBytes => _residentBytes;
     public long ResidentByteLimit { get; set; } = DefaultResidentByteLimit;
@@ -50,11 +54,20 @@ public sealed class EffectTextureCache : IDisposable
 
     public void Touch(EffectTexture texture)
     {
-        if (texture.IsDisposed)
+        if (texture.IsDisposed || !_ownedTextures.TryGetValue(texture, out var node))
             return;
-        ref var lastUsed = ref CollectionsMarshal.GetValueRefOrNullRef(_lastUsedFrame, texture);
-        if (!Unsafe.IsNullRef(ref lastUsed))
-            lastUsed = _frame;
+        node.Value = node.Value with { LastUsedFrame = _frame };
+        if (!ReferenceEquals(node, _leastRecentlyUsed.Last))
+        {
+            _leastRecentlyUsed.Remove(node);
+            _leastRecentlyUsed.AddLast(node);
+        }
+    }
+
+    private void Register(EffectTexture texture, object? key = null)
+    {
+        _ownedTextures.Add(texture, _leastRecentlyUsed.AddLast(new CacheEntry(texture, key, _frame)));
+        _residentBytes += texture.EstimatedBytes;
     }
 
     /// <summary>
@@ -144,11 +157,10 @@ public sealed class EffectTextureCache : IDisposable
             return cached;
         }
 
+        using var timing = MeasureTextPreparation();
         var texture = RasterizeText(key);
         _textTextures.Add(key, texture);
-        _ownedTextures.Add(texture);
-        _residentBytes += EstimatedBytes(texture);
-        _lastUsedFrame[texture] = _frame;
+        Register(texture, key);
         return texture;
     }
 
@@ -175,11 +187,10 @@ public sealed class EffectTextureCache : IDisposable
             return cached;
         }
 
+        using var timing = MeasureTextPreparation();
         var texture = RasterizeTextLayer(key);
         _layeredTextTextures.Add(key, texture);
-        _ownedTextures.Add(texture);
-        _residentBytes += EstimatedBytes(texture);
-        _lastUsedFrame[texture] = _frame;
+        Register(texture, key);
         return texture;
     }
 
@@ -209,13 +220,11 @@ public sealed class EffectTextureCache : IDisposable
         }
 
         var texture = new EffectTexture(_gl, handle, width, height, logicalSize ?? new Vector2(width, height));
-        _ownedTextures.Add(texture);
-        _residentBytes += EstimatedBytes(texture);
-        _lastUsedFrame[texture] = _frame;
+        Register(texture);
         return texture;
     }
 
-    public EffectTexture GetOrCreateVector(
+    public unsafe EffectTexture GetOrCreateVector(
         string cacheKey,
         Vector2 logicalSize,
         float rasterScale,
@@ -240,10 +249,13 @@ public sealed class EffectTextureCache : IDisposable
         draw(canvas);
         canvas.Flush();
 
-        var bytes = new byte[bitmap.ByteCount];
-        System.Runtime.InteropServices.Marshal.Copy(bitmap.GetPixels(), bytes, 0, bytes.Length);
-        var texture = CreateRgba(bytes, width, height, logicalSize);
+        using var uploadTiming = TextResources.MeasureTextStage(EffectTextStage.Upload);
+        // TexImage2D consumes the pixels synchronously; retain the native bitmap through the call.
+        // Avoid a second, potentially multi-megabyte managed allocation and full-image copy.
+        var texture = CreateRgba(new ReadOnlySpan<byte>((void*)bitmap.GetPixels(), bitmap.ByteCount), width, height, logicalSize);
         _vectorTextures.Add(key, texture);
+        var node = _ownedTextures[texture];
+        node.Value = node.Value with { Key = key };
         return texture;
     }
 
@@ -304,7 +316,7 @@ public sealed class EffectTextureCache : IDisposable
             handle,
             width,
             height,
-            new Vector2(width / key.RasterScale, height / key.RasterScale));
+            new Vector2(width / key.RasterScale, height / key.RasterScale), mipmaps: true);
     }
 
     private unsafe EffectTexture RasterizeTextLayer(LayeredTextTextureKey key)
@@ -363,7 +375,7 @@ public sealed class EffectTextureCache : IDisposable
             handle,
             width,
             height,
-            new Vector2(width / key.RasterScale, height / key.RasterScale));
+            new Vector2(width / key.RasterScale, height / key.RasterScale), mipmaps: true);
     }
 
     private static SKColor ToSkColor(EffectColor color) => new(
@@ -374,87 +386,71 @@ public sealed class EffectTextureCache : IDisposable
 
     internal void Collect(int maximumIdleFrames = 120)
     {
-        var pressureExceeded = _ownedTextures.Count > ResidentTextureLimit || _residentBytes > ResidentByteLimit;
-        if (!pressureExceeded && _frame - _lastCollectFrame < CollectIntervalFrames)
+        var pressureExceeded = IsOverLimit;
+        if (!_collectionPending && !pressureExceeded && _frame - _lastCollectFrame < CollectIntervalFrames)
             return;
         _lastCollectFrame = _frame;
 
         var minimumFrame = _frame > (ulong)Math.Max(0, maximumIdleFrames)
-            ? _frame - (ulong)maximumIdleFrames
-            : 0;
-        _sweepBuffer.Clear();
-        foreach (var texture in _ownedTextures)
-            if (_lastUsedFrame.GetValueOrDefault(texture) < minimumFrame)
-                _sweepBuffer.Add(texture);
-        foreach (var texture in _sweepBuffer)
-            Remove(texture);
-
-        while (_ownedTextures.Count > ResidentTextureLimit || _residentBytes > ResidentByteLimit)
+            ? _frame - (ulong)maximumIdleFrames : 0;
+        // Ordinary idle/soft-pressure reclamation is bounded. A 25% overshoot drains to the
+        // configured limits immediately. Never evict textures referenced by this frame's draws.
+        var hardPressure = _ownedTextures.Count > Math.Max(0L, ResidentTextureLimit) * 1.25 ||
+            _residentBytes > Math.Max(0L, ResidentByteLimit) * 1.25;
+        var released = 0;
+        while (_leastRecentlyUsed.First is { } oldest && oldest.Value.LastUsedFrame < _frame)
         {
-            EffectTexture? oldest = null;
-            var oldestFrame = ulong.MaxValue;
-            foreach (var texture in _ownedTextures)
-            {
-                var used = _lastUsedFrame.GetValueOrDefault(texture);
-                if (used < _frame && used < oldestFrame)
-                {
-                    oldestFrame = used;
-                    oldest = texture;
-                }
-            }
-            if (oldest is null)
-                break;
-            Remove(oldest);
+            if (!IsOverLimit && oldest.Value.LastUsedFrame >= minimumFrame) break;
+            if (!hardPressure && released >= CollectionBatchSize) break;
+            Remove(oldest.Value.Texture);
+            released++;
         }
+        _collectionPending = _leastRecentlyUsed.First is { } next && next.Value.LastUsedFrame < _frame &&
+            (IsOverLimit || next.Value.LastUsedFrame < minimumFrame);
     }
+
+    private bool IsOverLimit => _ownedTextures.Count > ResidentTextureLimit || _residentBytes > ResidentByteLimit;
 
     /// <summary>Releases a cached texture. Call only inside the owning GL lifecycle.</summary>
-    public void Release(EffectTexture texture)
-    {
-        if (_ownedTextures.Contains(texture))
-            Remove(texture);
-    }
+    public void Release(EffectTexture texture) => Remove(texture);
 
     private void Remove(EffectTexture texture)
     {
-        foreach (var key in _textTextures.AsValueEnumerable().Where(pair => ReferenceEquals(pair.Value, texture)).Select(pair => pair.Key).ToArray())
-            _textTextures.Remove(key);
-        foreach (var key in _layeredTextTextures.AsValueEnumerable().Where(pair => ReferenceEquals(pair.Value, texture)).Select(pair => pair.Key).ToArray())
-            _layeredTextTextures.Remove(key);
-        foreach (var key in _vectorTextures.AsValueEnumerable().Where(pair => ReferenceEquals(pair.Value, texture)).Select(pair => pair.Key).ToArray())
-            _vectorTextures.Remove(key);
-        _ownedTextures.Remove(texture);
-        _residentBytes -= EstimatedBytes(texture);
-        _lastUsedFrame.Remove(texture);
+        if (!_ownedTextures.Remove(texture, out var node)) return;
+        switch (node.Value.Key)
+        {
+            case TextTextureKey key: _textTextures.Remove(key); break;
+            case LayeredTextTextureKey key: _layeredTextTextures.Remove(key); break;
+            case VectorTextureKey key: _vectorTextures.Remove(key); break;
+        }
+        _leastRecentlyUsed.Remove(node);
+        _residentBytes -= texture.EstimatedBytes;
         texture.Dispose();
     }
 
-    private static long EstimatedBytes(EffectTexture texture) =>
-        (long)texture.Width * texture.Height * 4 * 4 / 3;
-
     public void Dispose()
     {
-        foreach (var texture in _ownedTextures)
+        foreach (var texture in _ownedTextures.Keys)
             texture.Dispose();
         _ownedTextures.Clear();
-        _lastUsedFrame.Clear();
+        _leastRecentlyUsed.Clear();
         _textTextures.Clear();
         _layeredTextTextures.Clear();
         _vectorTextures.Clear();
-        _sweepBuffer.Clear();
+        _collectionPending = false;
         _residentBytes = 0;
     }
 
     internal void Abandon()
     {
-        foreach (var texture in _ownedTextures)
+        foreach (var texture in _ownedTextures.Keys)
             texture.Abandon();
         _ownedTextures.Clear();
-        _lastUsedFrame.Clear();
+        _leastRecentlyUsed.Clear();
         _textTextures.Clear();
         _layeredTextTextures.Clear();
         _vectorTextures.Clear();
-        _sweepBuffer.Clear();
+        _collectionPending = false;
         _residentBytes = 0;
     }
 

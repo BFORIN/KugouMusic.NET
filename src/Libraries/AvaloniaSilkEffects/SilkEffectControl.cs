@@ -92,7 +92,15 @@ public class SilkEffectControl : OpenGlControlBase
         private set => SetAndRaise(LastErrorProperty, ref _lastError, value);
     }
 
-    public EffectFrameStatistics FrameStatistics { get; private set; }
+    private readonly object _statisticsGate = new();
+    private EffectFrameStatistics _frameStatistics;
+    public EffectFrameStatistics FrameStatistics
+    {
+        get { lock (_statisticsGate) return _frameStatistics; }
+        private set { lock (_statisticsGate) _frameStatistics = value; }
+    }
+    public EffectPerformanceHistory Performance { get; } = new();
+    public EffectCpuWorkMeter SceneBuildPerformance { get; } = new();
 
     public event EventHandler<EffectInitializationFailedEventArgs>? InitializationFailed;
 
@@ -128,6 +136,10 @@ public class SilkEffectControl : OpenGlControlBase
             CancelNextFrameRequest();
             _pacer.Reset();
         }
+        if (change.Property == SceneProperty)
+            Performance.Reset();
+        if (change.Property == SceneProperty || change.Property == IsPausedProperty)
+            _lastPresentationTimestamp = default;
         if (change.Property == SceneProperty || change.Property == IsPausedProperty ||
             change.Property == RenderModeProperty || change.Property == ClearColorProperty ||
             change.Property == TargetFrameRateProperty)
@@ -170,6 +182,8 @@ public class SilkEffectControl : OpenGlControlBase
             ReleaseDevice();
             return;
         }
+        var prepareStarted = Stopwatch.GetTimestamp();
+        var prepareAllocated = GC.GetAllocatedBytesForCurrentThread();
         if (_device is null)
             InitializeDevice(avaloniaGl);
 
@@ -196,22 +210,30 @@ public class SilkEffectControl : OpenGlControlBase
 
         var (elapsed, delta, frameNumber) = _clock.Step();
         var frame = new EffectFrame(elapsed, delta, pixelSize, scaling, frameNumber);
-        var renderStarted = Stopwatch.GetTimestamp();
-        _device.Render(_activeScene, frame, framebuffer, EffectColor.FromAvalonia(ClearColor));
-        var cpuMilliseconds = Stopwatch.GetElapsedTime(renderStarted).TotalMilliseconds;
+        var prepareMilliseconds = Stopwatch.GetElapsedTime(prepareStarted).TotalMilliseconds;
+        var prepareBytes = GC.GetAllocatedBytesForCurrentThread() - prepareAllocated;
+        var interval = _lastPresentationTimestamp == default || IsPaused
+            ? 0 : (presentationTimestamp - _lastPresentationTimestamp).TotalMilliseconds;
+        _device.Render(_activeScene, frame, framebuffer, EffectColor.FromAvalonia(ClearColor),
+            prepareMilliseconds, prepareBytes);
         _submittedFrames++;
-        var presentationDelta = presentationTimestamp - _lastPresentationTimestamp;
         _lastPresentationTimestamp = presentationTimestamp;
-        var fps = presentationDelta > TimeSpan.Zero ? 1d / presentationDelta.TotalSeconds : 0;
+        var fps = interval > 0 ? 1000d / interval : 0;
         var metrics = _device.FrameMetrics;
         FrameStatistics = new EffectFrameStatistics(
-            fps, cpuMilliseconds, _submittedFrames, 0,
+            fps, metrics.Timings.CpuMilliseconds, _submittedFrames, 0,
             metrics.DrawCalls, metrics.Flushes, metrics.UploadedBytes, pixelSize,
             metrics.PostProcessingEnabled, _device.OpenGlVersion, _device.Renderer,
             metrics.ResidentTextures, metrics.ResidentTextureBytes)
         {
             MultisampleCount = metrics.MultisampleCount,
+            Timings = metrics.Timings,
+            GpuResources = metrics.GpuResources,
+            CreatedTextures = metrics.CreatedTextures,
+            ReleasedTextures = metrics.ReleasedTextures,
         };
+
+        Performance.Record(metrics.Timings, interval);
 
         if (IsRenderingActive && !IsPaused && RenderMode == EffectRenderMode.Continuous)
             ScheduleNextFrameRequest();
@@ -267,6 +289,7 @@ public class SilkEffectControl : OpenGlControlBase
             return;
 
         IsRenderingActive = active;
+        _lastPresentationTimestamp = default;
         CancelNextFrameRequest();
         _pacer.Reset();
         // Keep the playback clock advancing while hidden. IsPaused remains

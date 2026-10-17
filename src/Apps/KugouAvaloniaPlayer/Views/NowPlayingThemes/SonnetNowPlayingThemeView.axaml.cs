@@ -53,10 +53,10 @@ public partial class SonnetNowPlayingThemeView : UserControl
             IsHitTestVisible = false,
             IsVisible = false,
         };
-        EffectViewport.Children.Add(_presetDebugOverlay);
+        ThemeShell.Viewport.Children.Add(_presetDebugOverlay);
 #endif
         _coordinator = new SilkThemePlaybackCoordinator(
-            this, EffectSurface, "Sonnet", DiagnosticOverlay, DiagnosticText, RebuildScene, OnVisualizerUpdated, RefreshPresetDebug);
+            this, ThemeShell.Surface, "Sonnet", ThemeShell.DiagnosticOverlay, ThemeShell.DiagnosticText, RebuildScene, OnVisualizerUpdated, RefreshPresetDebug);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -77,7 +77,7 @@ public partial class SonnetNowPlayingThemeView : UserControl
         var song = player.DisplayedPlayingSong ?? player.CurrentPlayingSong;
         var identity = NowPlayingThemeHelper.ResolveTrackIdentity(song, "sonnet");
         var program = SonnetProgramCompiler.Compile(
-            NowPlayingThemeHelper.BuildSonnetLines(player.RenderLyricLines, player.TotalDurationSeconds),
+            _coordinator.Lyrics.SonnetLines,
             identity);
         var color = viewModel.LyricColor;
         var theme = PlayerTheme with
@@ -107,7 +107,7 @@ public partial class SonnetNowPlayingThemeView : UserControl
                     PostProcessLensDispersion = 0,
                 },
             });
-            EffectSurface.Scene = _scene;
+            ThemeShell.Surface.Scene = _scene;
         }
         else
         {
@@ -119,7 +119,7 @@ public partial class SonnetNowPlayingThemeView : UserControl
 
         _coordinator.SynchronizePlaybackClock();
         OnVisualizerUpdated();
-        EffectSurface.RenderOnce();
+        ThemeShell.Surface.RenderOnce();
     }
 
     private void OnVisualizerUpdated()
@@ -148,7 +148,7 @@ public partial class SonnetNowPlayingThemeView : UserControl
     {
 #if DEBUG
         var presetLabel = _scene?.ActivePresetDebugLabel;
-        _presetDebugOverlay.IsVisible = presetLabel is not null && string.IsNullOrWhiteSpace(EffectSurface.LastError);
+        _presetDebugOverlay.IsVisible = presetLabel is not null && string.IsNullOrWhiteSpace(ThemeShell.Surface.LastError);
         if (_presetDebugText.Text != presetLabel)
             _presetDebugText.Text = presetLabel;
 #endif

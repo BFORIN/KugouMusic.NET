@@ -18,4 +18,8 @@ public readonly record struct EffectFrameStatistics(
     long ResidentTextureBytes = 0)
 {
     public int MultisampleCount { get; init; } = 1;
+    public EffectFrameTimings Timings { get; init; }
+    public EffectGpuResourceStatistics GpuResources { get; init; }
+    public int CreatedTextures { get; init; }
+    public int ReleasedTextures { get; init; }
 }

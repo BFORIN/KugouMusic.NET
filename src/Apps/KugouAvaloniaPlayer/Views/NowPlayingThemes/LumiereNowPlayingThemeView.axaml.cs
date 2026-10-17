@@ -27,7 +27,7 @@ public partial class LumiereNowPlayingThemeView : UserControl
     {
         InitializeComponent();
         _coordinator = new SilkThemePlaybackCoordinator(
-            this, EffectSurface, "绘光", DiagnosticOverlay, DiagnosticText, RebuildScene, OnVisualizerUpdated);
+            this, ThemeShell.Surface, "绘光", ThemeShell.DiagnosticOverlay, ThemeShell.DiagnosticText, RebuildScene, OnVisualizerUpdated);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -49,7 +49,7 @@ public partial class LumiereNowPlayingThemeView : UserControl
         var identity = NowPlayingThemeHelper.ResolveTrackIdentity(song, "lumiere");
         var duration = player.TotalDurationSeconds > 0 ? player.TotalDurationSeconds : (double?)null;
         var program = LumiereProgramCompiler.Compile(
-            NowPlayingThemeHelper.BuildLumiereLines(player.RenderLyricLines, player.TotalDurationSeconds),
+            _coordinator.Lyrics.LumiereLines,
             identity,
             duration,
             seamless: true);
@@ -64,7 +64,7 @@ public partial class LumiereNowPlayingThemeView : UserControl
         if (_scene is null)
         {
             _scene = new LumiereEffectScene(context);
-            EffectSurface.Scene = _scene;
+            ThemeShell.Surface.Scene = _scene;
         }
         else
             _scene.SetSong(context);
@@ -72,7 +72,7 @@ public partial class LumiereNowPlayingThemeView : UserControl
         _scene.Paused = !player.IsPlayingAudio;
         _coordinator.SynchronizePlaybackClock();
         OnVisualizerUpdated();
-        EffectSurface.RenderOnce();
+        ThemeShell.Surface.RenderOnce();
     }
 
     private void OnVisualizerUpdated()

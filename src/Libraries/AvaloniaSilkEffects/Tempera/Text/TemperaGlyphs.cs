@@ -14,9 +14,9 @@ internal readonly record struct TemperaGlyph(EffectTexture Texture, Vector2 Cent
 /// </summary>
 internal static class TemperaGlyphs
 {
-    private readonly record struct Layout(string[] Lines, double[] Widths, Vector2 Box);
+    internal readonly record struct Layout(string[] Lines, double[] Widths, Vector2 Box);
 
-    private static Layout Measure(string text, string family, int weight, double fontSize, double wrapWidth)
+    internal static Layout Measure(string text, string family, int weight, double fontSize, double wrapWidth)
     {
         var (ascent, descent) = TemperaFonts.Box(family, weight);
         var lineHeight = fontSize * (ascent + descent);
@@ -51,9 +51,15 @@ internal static class TemperaGlyphs
         Measure(text, family, weight, fontSize, wrapWidth).Box;
 
     public static TemperaGlyph Get(EffectTextureCache cache, string text, string family, int weight, double fontSize, float rasterScale,
-        double wrapWidth = 0)
+        double wrapWidth = 0, Layout? preparedLayout = null)
     {
-        var layout = Measure(text, family, weight, fontSize, wrapWidth);
+        using var timing = cache.MeasureTextPreparation();
+        var resources = cache.TextResources;
+        Layout layout;
+        if (preparedLayout is { } prepared) layout = prepared;
+        else
+            using (resources.MeasureTextStage(EffectTextStage.Measure))
+                layout = Measure(text, family, weight, fontSize, wrapWidth);
         var box = layout.Box;
         var (ascent, descent) = TemperaFonts.Box(family, weight);
         var lineHeight = fontSize * (ascent + descent);
@@ -63,6 +69,7 @@ internal static class TemperaGlyphs
         var key = $"tempera:{family}:{weight}:{fontSize:R}:{wrapWidth:R}:{text}";
         var texture = cache.GetOrCreateVector(key, logical, scale, canvas =>
         {
+            using var stage = resources.MeasureTextStage(EffectTextStage.Raster);
             using var paint = new SKPaint { IsAntialias = true, Color = SKColors.White };
             for (var index = 0; index < layout.Lines.Length; index++)
             {

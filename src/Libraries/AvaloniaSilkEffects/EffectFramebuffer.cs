@@ -66,6 +66,7 @@ internal sealed class EffectFramebuffer(GL gl) : IDisposable
         }
         gl.GetInteger(GetPName.Samples, out var actualSamples);
         Samples = Math.Max(1, actualSamples);
+        EffectGpuResources.For(gl).Target(Framebuffer, (long)width * height * 8 * Samples);
     }
 
     public void ResolveTo(EffectFramebuffer destination)
@@ -83,6 +84,7 @@ internal sealed class EffectFramebuffer(GL gl) : IDisposable
 
     private void DisposeHandles()
     {
+        EffectGpuResources.For(gl).ReleaseTarget(Framebuffer);
         if (Framebuffer != 0)
             gl.DeleteFramebuffer(Framebuffer);
         if (Texture != 0)

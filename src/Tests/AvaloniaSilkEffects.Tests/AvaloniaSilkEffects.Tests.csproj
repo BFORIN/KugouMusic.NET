@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../Apps/KugouAvaloniaPlayer/Views/NowPlayingThemes/NowPlayingLyricSnapshot.cs" Link="Lyrics/NowPlayingLyricSnapshot.cs" />
     <!-- Compile the VM-independent Fume adapter without building the player. -->
     <Compile Include="../../Apps/KugouAvaloniaPlayer/Controls/FumeBackgroundScene.cs" Link="Fume/FumeBackgroundScene.cs" />
     <Compile Include="../../Apps/KugouAvaloniaPlayer/Controls/FumeArticleLayout.cs" Link="Fume/FumeArticleLayout.cs" />

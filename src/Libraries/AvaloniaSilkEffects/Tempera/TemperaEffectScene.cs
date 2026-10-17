@@ -18,6 +18,7 @@ public sealed class TemperaSceneOptions
     /// <summary>Folia staticMode: no echoes, no transitions, no post-processing.</summary>
     public bool StaticMode { get; init; }
     public double LyricsFontScale { get; init; } = 1;
+    public bool EnableTextPrewarm { get; init; } = true;
 }
 
 /// <summary>
@@ -41,8 +42,7 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         public double Alpha;
     }
 
-    private readonly Dictionary<int, TemperaSceneView> _cache = [];
-    private readonly List<TemperaSceneView> _retired = [];
+    private readonly EffectParagraphCache<TemperaSceneView> _cache = [];
     private readonly List<ScenePose> _poses = [];
     private readonly TemperaOverlay _overlay = new();
     private TemperaRenderer? _renderer;
@@ -58,6 +58,7 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
     private int _activeIndex = -1;
     private bool _overlayDrawn;
     private bool _isGles;
+    private double _time;
 
     public TemperaSongContext Song { get; private set; } = song;
     public TemperaSceneOptions Options { get; } = options ?? new TemperaSceneOptions();
@@ -113,10 +114,8 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
 
     private void ClearScenes()
     {
-        foreach (var scene in _cache.Values) scene.Dispose();
-        _cache.Clear();
-        foreach (var scene in _retired) scene.Dispose();
-        _retired.Clear();
+        _renderer?.ResetWarmup();
+        _cache.Dispose();
         _activeIndex = -1;
     }
 
@@ -148,8 +147,8 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         {
             Song = staged.Song;
             _pending = null;
-            _retired.AddRange(_cache.Values);
-            _cache.Clear();
+            _renderer?.ResetWarmup();
+            _cache.RetireAll();
             _cache[staged.Index] = staged.Scene;
             _activeIndex = staged.Index;
             _staged = null;
@@ -177,7 +176,7 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         _poses.Clear();
         _creditsVisible = false;
         if (_renderer is null || _logical.X <= 1) return;
-        var time = frame.Elapsed.TotalSeconds;
+        var time = _time = frame.Elapsed.TotalSeconds;
         var built = AdvanceSongSwap(time);
         if (!_overlayDrawn)
         {
@@ -193,6 +192,7 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         var paragraphIndex = program.ParagraphIndexAt(time);
         if (paragraphIndex != _activeIndex)
         {
+            _renderer.ResetWarmup();
             _activeIndex = paragraphIndex;
             if (!_cache.ContainsKey(paragraphIndex))
             {
@@ -212,19 +212,12 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         _creditsFrame = TemperaCreditsFrame.At(time, finalParagraph.EndTime);
         if (!built && _staged is null)
         {
-            var next = paragraphIndex + 1;
-            var previous = paragraphIndex - 1;
-            if (_retired.Count > 0)
-            {
-                _retired[0].Dispose();
-                _retired.RemoveAt(0);
-            }
-            else if (next < program.Paragraphs.Count && !_cache.ContainsKey(next))
-                _cache[next] = BuildScene(Song, next);
-            else if (hasCredits && _credits is null && time >= finalParagraph.EndTime - CreditsPrebuild)
+            var work = _cache.NextWork(paragraphIndex, program.Paragraphs.Count,
+                hasCredits && _credits is null && time >= finalParagraph.EndTime - CreditsPrebuild);
+            if (work.Kind == EffectCacheWorkKind.Paragraph)
+                _cache[work.Index] = BuildScene(Song, work.Index);
+            else if (work.Kind == EffectCacheWorkKind.Credits)
                 BuildCredits();
-            else if (previous >= 0 && !_cache.ContainsKey(previous))
-                _cache[previous] = BuildScene(Song, previous);
         }
         if (hasCredits && _creditsFrame.Active && _credits is null) BuildCredits();
 
@@ -346,7 +339,27 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         gl.BindFramebuffer(FramebufferTarget.Framebuffer, (uint)outputFramebuffer);
         gl.Viewport(viewport[0], viewport[1], (uint)viewport[2], (uint)viewport[3]);
         _renderer.Present(_main, width, height);
+        primitives.RecordExternalDrawCalls(_renderer.DrawCalls);
         primitives.SetViewport(new Vector2(width, height));
+        if (Options.EnableTextPrewarm) PrewarmText();
+    }
+
+    private void PrewarmText()
+    {
+        if (_renderer is null || !EffectTextWarmup.CanStart(Device.Textures.TextResources)) return;
+        foreach (var pose in _poses)
+        {
+            var active = pose.Scene.ActiveShotIndex;
+            if (active < 0 || active >= pose.Scene.Shots.Count) continue;
+            var scale = pose.Frame.Blur > BlurActiveStrength && TransitionsEnabled ? PixelScale * 0.5f : PixelScale;
+            if (_renderer.PrewarmText(pose.Scene.Shots[active].Container, scale)) return;
+        }
+        TemperaShotView? upcoming = null;
+        foreach (var scene in _cache.Values)
+            foreach (var shot in scene.Shots)
+                if (shot.Shot.StartTime > _time && shot.Shot.StartTime <= _time + EffectTextWarmup.LookAheadSeconds &&
+                    (upcoming is null || shot.Shot.StartTime < upcoming.Shot.StartTime)) upcoming = shot;
+        if (upcoming is not null) _renderer.PrewarmText(upcoming.Container, PixelScale);
     }
 
     /// <summary>The scene's filterArea (the viewport) through its transform, as a pixel AABB clipped to the target (Pixi bounds).</summary>

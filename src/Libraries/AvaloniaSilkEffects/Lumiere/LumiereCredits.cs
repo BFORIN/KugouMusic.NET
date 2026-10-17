@@ -95,6 +95,7 @@ internal sealed class LumiereCredits : IDisposable
             {
                 Width = width,
                 Height = height,
+                Textures = gpu.Textures,
                 Lines = [line],
                 Font = theme.FontFamily,
                 Weight = theme.FontWeight,
@@ -156,6 +157,7 @@ internal sealed class LumiereCredits : IDisposable
             _tuning.TextOnly ? null : (root, viewport) =>
             {
                 gpu.LightField.Render(_field, root, viewport, _width, _height, 0);
+                primitives.RecordExternalDrawCalls(1);
                 var draw = (time - 0.8) / 3.6;
                 if (_tuning.LineArt && draw > 0) _art.Draw(primitives, root, time, draw, Smooth((time - 0.8) / 1.2), _field.Beams, _palette.Light);
                 _motes.Draw(primitives, root, time, _field.Beams, _palette.Light, rise);

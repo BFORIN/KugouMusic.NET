@@ -1,9 +1,9 @@
 using Silk.NET.OpenGL;
 
-namespace AvaloniaSilkEffects.Lumiere.Light;
+namespace AvaloniaSilkEffects;
 
 /// <summary>A single-sample RGBA8 color target (no depth / stencil), like a Pixi filter texture.</summary>
-internal sealed class LumiereRenderTarget(GL gl) : IDisposable
+internal sealed class EffectColorTarget(GL gl) : IDisposable
 {
     public uint Framebuffer { get; private set; }
     public uint Texture { get; private set; }
@@ -35,11 +35,12 @@ internal sealed class LumiereRenderTarget(GL gl) : IDisposable
         if (status != GLEnum.FramebufferComplete)
         {
             Dispose();
-            throw new InvalidOperationException($"Lumiere render target {width}x{height} is incomplete: {status}.");
+            throw new InvalidOperationException($"Effect color target {width}x{height} is incomplete: {status}.");
         }
+        EffectGpuResources.For(gl).Target(Framebuffer, (long)width * height * 4);
     }
 
-    public void Bind(bool clear)
+    public void Bind(bool clear = false)
     {
         gl.BindFramebuffer(FramebufferTarget.Framebuffer, Framebuffer);
         gl.Viewport(0, 0, (uint)Width, (uint)Height);
@@ -50,6 +51,7 @@ internal sealed class LumiereRenderTarget(GL gl) : IDisposable
 
     public void Dispose()
     {
+        EffectGpuResources.For(gl).ReleaseTarget(Framebuffer);
         if (Framebuffer != 0) gl.DeleteFramebuffer(Framebuffer);
         if (Texture != 0) gl.DeleteTexture(Texture);
         Framebuffer = 0;
@@ -59,20 +61,3 @@ internal sealed class LumiereRenderTarget(GL gl) : IDisposable
     }
 }
 
-/// <summary>The framebuffer and viewport bound when a Lumiere group starts, restored after it.</summary>
-internal readonly record struct LumiereBinding(uint Framebuffer, int X, int Y, int Width, int Height)
-{
-    public static unsafe LumiereBinding Capture(GL gl)
-    {
-        gl.GetInteger(GetPName.DrawFramebufferBinding, out var framebuffer);
-        var viewport = stackalloc int[4];
-        gl.GetInteger(GetPName.Viewport, viewport);
-        return new LumiereBinding((uint)framebuffer, viewport[0], viewport[1], viewport[2], viewport[3]);
-    }
-
-    public void Restore(GL gl)
-    {
-        gl.BindFramebuffer(FramebufferTarget.Framebuffer, Framebuffer);
-        gl.Viewport(X, Y, (uint)Width, (uint)Height);
-    }
-}

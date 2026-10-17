@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using AvaloniaLyrics;
 using AvaloniaSilkEffects;
 using KugouAvaloniaPlayer.ViewModels;
@@ -15,6 +17,8 @@ namespace KugouAvaloniaPlayer.Controls;
 // A direct Avalonia interpretation of Folia's Pendolo clockwork lyric visualizer.
 public sealed class PendoloVisualizerControl : Control
 {
+    public AvaloniaSilkEffects.EffectCpuWorkMeter DrawingPerformance { get; } = new();
+
     private const double ArcAngleRadians = 100d * Math.PI / 180d;
     private static readonly TimeSpan ManualAnchorTimeout = TimeSpan.FromSeconds(3);
     private static readonly Cursor LyricHandCursor = new(StandardCursorType.Hand);
@@ -90,6 +94,11 @@ public sealed class PendoloVisualizerControl : Control
         MouseParallax3D.ParallaxOriginYProperty.AddOwner<PendoloVisualizerControl>();
 
     private bool _frameQueued;
+    private bool _needsFrame = true;
+    private bool _attached;
+    private bool _renderingActive;
+    private PlayerViewModel? _subscribedPlayer;
+    private readonly List<Visual> _visibilityAncestors = [];
     private bool _hasFrameTimestamp;
     private TimeSpan _lastFrameTimestamp;
     private double _displayLineIndex = -1;
@@ -103,6 +112,8 @@ public sealed class PendoloVisualizerControl : Control
     private int _wheelDirection;
     private DateTimeOffset _manualAnchorExpiresAt;
     private MouseParallax3D? _parallax;
+    private readonly PendoloTextCache _textCache = new();
+    private readonly PendoloGearCache _gearCache = new();
 
     static PendoloVisualizerControl()
     {
@@ -230,6 +241,14 @@ public sealed class PendoloVisualizerControl : Control
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        _attached = true;
+        foreach (var ancestor in this.GetVisualAncestors())
+        {
+            _visibilityAncestors.Add(ancestor);
+            ancestor.PropertyChanged += OnAncestorPropertyChanged;
+        }
+        AttachPlayer(Player);
+        UpdateRenderingActivity();
         _parallax ??= new MouseParallax3D(this);
         _parallax.Attach();
         ApplyParallax();
@@ -238,27 +257,103 @@ public sealed class PendoloVisualizerControl : Control
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        _attached = false;
+        _renderingActive = false;
+        AttachPlayer(null);
+        foreach (var ancestor in _visibilityAncestors) ancestor.PropertyChanged -= OnAncestorPropertyChanged;
+        _visibilityAncestors.Clear();
         _frameQueued = false;
         _hasFrameTimestamp = false;
         _parallax?.Detach();
+        _textCache.Clear();
+        _gearCache.Clear();
         base.OnDetachedFromVisualTree(e);
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == PlayerProperty)
+        {
+            AttachPlayer(_attached ? Player : null);
+            _textCache.Clear();
+            RequestUpdate();
+        }
+        if (change.Property == IsVisibleProperty)
+            UpdateRenderingActivity();
         if (change.Property == BoundsProperty &&
             Bounds is { Width: > 0, Height: > 0 })
         {
             _hasFrameTimestamp = false;
             InvalidateVisual();
-            RequestNextFrame();
+            RequestUpdate();
         }
         else if (change.Property == IsActiveProperty && change.NewValue is true)
         {
             _hasFrameTimestamp = false;
-            RequestNextFrame();
+            RequestUpdate();
         }
+    }
+
+    private void AttachPlayer(PlayerViewModel? player)
+    {
+        if (ReferenceEquals(_subscribedPlayer, player)) return;
+        if (_subscribedPlayer is { } previous)
+        {
+            previous.PropertyChanged -= OnPlayerPropertyChanged;
+            previous.RenderLyricLines.CollectionChanged -= OnLyricLinesChanged;
+            previous.VisualizerUpdated -= OnVisualizerUpdated;
+        }
+        _subscribedPlayer = player;
+        if (player is not null)
+        {
+            player.PropertyChanged += OnPlayerPropertyChanged;
+            player.RenderLyricLines.CollectionChanged += OnLyricLinesChanged;
+            player.VisualizerUpdated += OnVisualizerUpdated;
+        }
+    }
+
+    private void OnPlayerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PlayerViewModel.IsPlayingAudio) or nameof(PlayerViewModel.CurrentLyricIndex) or
+            nameof(PlayerViewModel.CurrentPositionSeconds)) RequestUpdate();
+    }
+
+    private void OnLyricLinesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _textCache.Clear();
+        _lyricHitTargets.Clear();
+        RequestUpdate();
+    }
+
+    private void OnVisualizerUpdated()
+    {
+        // A paused audio service can repeatedly publish the same zero-energy snapshot.
+        if (Math.Abs(_energyTracker.Current - ResolveAudioEnergy(Player)) >= 1e-5)
+            RequestUpdate();
+    }
+
+    private void OnAncestorPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == IsVisibleProperty || e.Property == Window.WindowStateProperty)
+            UpdateRenderingActivity();
+    }
+
+    private void UpdateRenderingActivity()
+    {
+        var active = _attached && IsVisible;
+        foreach (var ancestor in _visibilityAncestors)
+            active &= ancestor.IsVisible && ancestor is not Window { WindowState: WindowState.Minimized };
+        if (active == _renderingActive) return;
+        _renderingActive = active;
+        _hasFrameTimestamp = false;
+        if (active) RequestUpdate();
+    }
+
+    private void RequestUpdate()
+    {
+        _needsFrame = true;
+        RequestNextFrame();
     }
 
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -293,6 +388,7 @@ public sealed class PendoloVisualizerControl : Control
         }
 
         _manualAnchorExpiresAt = DateTimeOffset.UtcNow + ManualAnchorTimeout;
+        RequestUpdate();
         e.Handled = true;
     }
 
@@ -312,6 +408,7 @@ public sealed class PendoloVisualizerControl : Control
         _wheelAccumulator = 0;
         _wheelDirection = 0;
         SeekTo(player, target.Position);
+        RequestUpdate();
         e.Handled = true;
     }
 
@@ -325,6 +422,7 @@ public sealed class PendoloVisualizerControl : Control
 
     public override void Render(DrawingContext context)
     {
+        using var timing = DrawingPerformance.Measure();
         base.Render(context);
         var width = Bounds.Width;
         var height = Bounds.Height;
@@ -341,8 +439,10 @@ public sealed class PendoloVisualizerControl : Control
         var lyricRadius = baseRadius + minDimension * 0.06;
         var gearRotation = -_displayLineIndex * Math.PI * 2d / 36d;
 
+        _textCache.BeginFrame();
         DrawClockwork(context, center, baseRadius, lyricRadius, gearRotation, _energyTracker.Current);
         DrawLyrics(context, player, center, lyricRadius, width, height);
+        _textCache.EndFrame();
     }
 
     private void RequestNextFrame()
@@ -360,11 +460,12 @@ public sealed class PendoloVisualizerControl : Control
 
     private bool ShouldAnimate()
     {
-        return IsActive &&
-               IsVisible &&
-               Bounds.Width > 0 &&
-               Bounds.Height > 0 &&
-               TopLevel.GetTopLevel(this) != null;
+        var target = _manualAnchorIndex ?? Math.Max(-1, Player?.CurrentLyricIndex ?? -1);
+        return IsActive && _renderingActive && Player is not null &&
+               Bounds.Width > 0 && Bounds.Height > 0 &&
+               (Player.IsPlayingAudio || _needsFrame || _manualAnchorIndex.HasValue ||
+                Math.Abs(target - _displayLineIndex) >= 1e-6 || Math.Abs(_lineVelocity) >= 1e-5 ||
+                Math.Abs(_energyTracker.Current - ResolveAudioEnergy(Player)) >= 1e-5);
     }
 
     private void OnAnimationFrame(TimeSpan timestamp)
@@ -382,6 +483,7 @@ public sealed class PendoloVisualizerControl : Control
         _hasFrameTimestamp = true;
         _lastFrameTimestamp = timestamp;
 
+        _needsFrame = false;
         if (Player?.IsPlayingAudio == true)
             _clockSeconds += deltaSeconds;
 
@@ -417,9 +519,16 @@ public sealed class PendoloVisualizerControl : Control
 
         var targetEnergy = (float)ResolveAudioEnergy(Player);
         _energyTracker.Update(targetEnergy, (float)deltaSeconds, 10f, 4f);
+        if (Math.Abs(targetLineIndex - _displayLineIndex) < 1e-6 && Math.Abs(_lineVelocity) < 1e-5)
+        {
+            _displayLineIndex = targetLineIndex;
+            _lineVelocity = 0;
+        }
+        if (Math.Abs(_energyTracker.Current - targetEnergy) < 1e-5) _energyTracker.Reset(targetEnergy);
 
         InvalidateVisual();
         RequestNextFrame();
+        if (!_frameQueued) _hasFrameTimestamp = false;
     }
 
     private void DrawClockwork(
@@ -662,17 +771,7 @@ public sealed class PendoloVisualizerControl : Control
             var lineColor = index == focusIndex
                 ? WithAlpha(LyricColor, (byte)(LyricColor.A * 133 / 255))
                 : WithAlpha(LyricColor, (byte)Math.Round(opacity * LyricColor.A));
-            var text = new FormattedText(
-                line.Text,
-                CultureInfo.CurrentUICulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                fontSize,
-                new SolidColorBrush(lineColor))
-            {
-                MaxTextWidth = maxTextWidth,
-                TextAlignment = TextAlignment.Left
-            };
+            var text = _textCache.Get(index * 3, line.Text, typeface, fontSize, maxTextWidth, lineColor);
 
             var origin = new Point(
                 anchor.X,
@@ -693,8 +792,8 @@ public sealed class PendoloVisualizerControl : Control
 
                 if (index == focusIndex)
                 {
-                    DrawActiveSweep(context, text, origin, line, player.CurrentPositionSeconds, typeface, fontSize);
-                    DrawAlternateText(context, line, origin, text.Height, maxTextWidth);
+                    DrawActiveSweep(context, text, origin, line, player.CurrentPositionSeconds, typeface, fontSize, index);
+                    DrawAlternateText(context, line, origin, text.Height, maxTextWidth, index);
                 }
             }
         }
@@ -763,17 +862,17 @@ public sealed class PendoloVisualizerControl : Control
         LyricLine line,
         double playbackSeconds,
         Typeface typeface,
-        double fontSize)
+        double fontSize,
+        int index)
     {
         var sweepWidth = ResolveSweepWidth(line, playbackSeconds, typeface, fontSize, text);
         if (sweepWidth <= 0)
             return;
 
-        var sungColor = LyricColor;
-        text.SetForegroundBrush(new SolidColorBrush(sungColor));
+        var sung = _textCache.Get(index * 3 + 1, line.Text, typeface, fontSize, text.MaxTextWidth, LyricColor);
         using (context.PushClip(new Rect(origin.X, origin.Y, sweepWidth, text.Height + 2)))
         {
-            context.DrawText(text, origin);
+            context.DrawText(sung, origin);
         }
     }
 
@@ -819,26 +918,11 @@ public sealed class PendoloVisualizerControl : Control
 
         var wholeCharacters = Math.Clamp((int)Math.Floor(characterProgress), 0, line.Text.Length);
         var fractionalCharacter = characterProgress - wholeCharacters;
-        var prefix = line.Text[..wholeCharacters];
-        var prefixText = new FormattedText(
-            prefix,
-            CultureInfo.CurrentUICulture,
-            FlowDirection.LeftToRight,
-            typeface,
-            fontSize,
-            Brushes.White);
-        var width = prefixText.WidthIncludingTrailingWhitespace;
-
+        var width = _textCache.PrefixWidth(line.Text, wholeCharacters, typeface, fontSize);
         if (fractionalCharacter > 0 && wholeCharacters < line.Text.Length)
         {
-            var nextText = new FormattedText(
-                line.Text[..(wholeCharacters + 1)],
-                CultureInfo.CurrentUICulture,
-                FlowDirection.LeftToRight,
-                typeface,
-                fontSize,
-                Brushes.White);
-            width += (nextText.WidthIncludingTrailingWhitespace - width) * fractionalCharacter;
+            var next = _textCache.PrefixWidth(line.Text, wholeCharacters + 1, typeface, fontSize);
+            width += (next - width) * fractionalCharacter;
         }
 
         return Math.Clamp(width, 0, fullText.WidthIncludingTrailingWhitespace);
@@ -849,7 +933,8 @@ public sealed class PendoloVisualizerControl : Control
         LyricLine line,
         Point origin,
         double primaryHeight,
-        double maxTextWidth)
+        double maxTextWidth,
+        int index)
     {
         var alternate = ShowTranslation && !string.IsNullOrWhiteSpace(line.Translation)
             ? line.Translation
@@ -859,33 +944,20 @@ public sealed class PendoloVisualizerControl : Control
         if (alternate == null)
             return;
 
-        var text = new FormattedText(
-            alternate,
-            CultureInfo.CurrentUICulture,
-            FlowDirection.LeftToRight,
-            new Typeface(LyricFontFamily, FontStyle.Normal, FontWeight.Normal),
-            13,
-            new SolidColorBrush(TranslationColor))
-        {
-            MaxTextWidth = maxTextWidth,
-            TextAlignment = TextAlignment.Left
-        };
+        var text = _textCache.Get(index * 3 + 2, alternate,
+            new Typeface(LyricFontFamily, FontStyle.Normal, FontWeight.Normal), 13, maxTextWidth, TranslationColor);
         context.DrawText(text, new Point(origin.X, origin.Y + primaryHeight + 7));
     }
 
     private void DrawWaitingText(DrawingContext context, Point center, double lyricRadius)
     {
-        var text = new FormattedText(
-            "等待歌词时序",
-            CultureInfo.CurrentUICulture,
-            FlowDirection.LeftToRight,
-            new Typeface(LyricFontFamily, FontStyle.Normal, FontWeight.Normal),
-            22,
-            new SolidColorBrush(WithAlpha(SecondaryColor, 180)));
+        var text = _textCache.Get(-1, "等待歌词时序",
+            new Typeface(LyricFontFamily, FontStyle.Normal, FontWeight.Normal), 22, double.PositiveInfinity,
+            WithAlpha(SecondaryColor, 180));
         context.DrawText(text, new Point(center.X + lyricRadius, center.Y - text.Height / 2));
     }
 
-    private static void DrawGear(
+    private void DrawGear(
         DrawingContext context,
         Point center,
         double radius,
@@ -899,17 +971,7 @@ public sealed class PendoloVisualizerControl : Control
         var pen = new Pen(new SolidColorBrush(color), lineWidth);
         var fillBrush = fill ? new SolidColorBrush(WithAlpha(color, 15)) : null;
         var innerRadius = Math.Max(2, radius - toothDepth);
-        var points = new Point[teeth * 4];
-
-        for (var index = 0; index < teeth; index++)
-        {
-            var baseAngle = rotation + index * Math.PI * 2 / teeth;
-            var anglePerTooth = Math.PI * 2 / teeth;
-            points[index * 4] = PolarPoint(center, innerRadius, baseAngle - anglePerTooth * 0.22);
-            points[index * 4 + 1] = PolarPoint(center, radius, baseAngle - anglePerTooth * 0.12);
-            points[index * 4 + 2] = PolarPoint(center, radius, baseAngle + anglePerTooth * 0.12);
-            points[index * 4 + 3] = PolarPoint(center, innerRadius, baseAngle + anglePerTooth * 0.22);
-        }
+        var points = _gearCache.Get(radius, teeth, toothDepth);
 
         if (fillBrush != null)
         {
@@ -917,8 +979,9 @@ public sealed class PendoloVisualizerControl : Control
             context.DrawEllipse(fillBrush, null, center, innerRadius, innerRadius);
         }
 
-        for (var index = 0; index < points.Length; index++)
-            context.DrawLine(pen, points[index], points[(index + 1) % points.Length]);
+        using (context.PushTransform(Matrix.CreateRotation(rotation) * Matrix.CreateTranslation(center.X, center.Y)))
+            for (var index = 0; index < points.Length; index++)
+                context.DrawLine(pen, points[index], points[(index + 1) % points.Length]);
     }
 
     private static void DrawSpokedWheel(
