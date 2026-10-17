@@ -138,24 +138,8 @@ public static partial class TemperaProgramCompiler
     [GeneratedRegex(@"[!?！？…]")]
     private static partial Regex Exclaim();
 
-    private static double Median(List<double> values)
-    {
-        if (values.Count == 0) return 0.5;
-        var sorted = values.OrderBy(value => value).ToArray();
-        var middle = sorted.Length / 2;
-        return sorted.Length % 2 == 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
-    }
-
-    public static double ResolveParagraphGapThreshold(IReadOnlyList<LumiereLine> lines)
-    {
-        var gaps = new List<double>();
-        for (var index = 1; index < lines.Count; index++)
-        {
-            var gap = lines[index].StartTime - Math.Min(lines[index - 1].RenderEndTime, lines[index].StartTime);
-            if (gap > 0) gaps.Add(gap);
-        }
-        return Math.Clamp(Median(gaps) * 2.5, 1.25, 3.5);
-    }
+    public static double ResolveParagraphGapThreshold(IReadOnlyList<LumiereLine> lines) =>
+        LyricParagraphScheduler.ResolveParagraphGapThreshold(lines, line => line.StartTime, line => line.RenderEndTime);
 
     private static bool MetadataChanged(LumiereLine previous, LumiereLine next) =>
         previous.BlockIndex is not null && next.BlockIndex is not null && previous.BlockIndex != next.BlockIndex
@@ -233,50 +217,18 @@ public static partial class TemperaProgramCompiler
         return sticky;
     }
 
-    private sealed record ParagraphDraft(List<TemperaCompiledLine> Lines, TemperaParagraphBoundary Boundary);
-
-    private static List<ParagraphDraft> SplitOversizedDraft(ParagraphDraft draft)
+    private static TemperaParagraphKind Classify(IReadOnlyList<TemperaCompiledLine> lines, int index, int total)
     {
-        var output = new List<ParagraphDraft>();
-        var remaining = draft.Lines;
-        var boundary = draft.Boundary;
-        var guard = 0;
-        while (remaining.Count > 6 || remaining.Count > 1 && remaining[^1].RenderEndTime - remaining[0].Line.StartTime > 18)
-        {
-            if (guard++ > 1000) break;
-            var bestIndex = -1;
-            var bestGap = double.NegativeInfinity;
-            // Folia sorts the candidates by gap, descending, with a stable sort: the first of equal gaps wins.
-            for (var offset = 0; offset < remaining.Count - 3; offset++)
-            {
-                var gap = remaining[offset + 2].Line.StartTime - remaining[offset + 1].RenderEndTime;
-                if (double.IsNaN(gap)) continue;
-                if (gap > bestGap)
-                {
-                    bestGap = gap;
-                    bestIndex = offset + 2;
-                }
-            }
-            var splitIndex = Math.Max(1, bestIndex >= 0 ? bestIndex : Math.Min(4, remaining.Count - 1));
-            output.Add(new ParagraphDraft(remaining[..splitIndex], boundary));
-            remaining = remaining[splitIndex..];
-            boundary = output[^1].Lines.Count >= 6 ? TemperaParagraphBoundary.LineCap : TemperaParagraphBoundary.DurationCap;
-        }
-        output.Add(new ParagraphDraft(remaining, boundary));
-        return output;
-    }
+        var kind = LyricParagraphScheduler.ClassifyParagraph(
+            lines, index, total,
+            line => line.Line.Text,
+            line => line.Line.StartTime,
+            line => line.RenderEndTime,
+            line => line.Line.SongPart,
+            line => line.Line.IsChorus,
+            line => line.Segments.Count(s => s.IsWordLike));
 
-    private static TemperaParagraphKind Classify(List<TemperaCompiledLine> lines, int index, int total)
-    {
-        if (lines.Any(item => item.Line.IsChorus || ChorusPart().IsMatch(item.Line.SongPart ?? ""))) return TemperaParagraphKind.Chorus;
-        if (lines.Any(item => BreakPart().IsMatch(item.Line.SongPart ?? ""))) return TemperaParagraphKind.Break;
-        if (index == total - 1) return TemperaParagraphKind.Outro;
-        var duration = lines[^1].RenderEndTime - lines[0].Line.StartTime;
-        var segmentCount = lines.Sum(line => line.Segments.Count(segment => segment.IsWordLike));
-        var punctuation = lines.Sum(line => Exclaim().Matches(line.Line.Text).Count);
-        if (duration <= 3.5 || segmentCount <= 3) return TemperaParagraphKind.Breath;
-        if (punctuation >= 2 || segmentCount / Math.Max(duration, 1) > 2.5) return TemperaParagraphKind.Lift;
-        return TemperaParagraphKind.Verse;
+        return (TemperaParagraphKind)(int)kind;
     }
 
     private sealed record ShotChunk(int LineIndex, int SegmentStart, int SegmentEnd, double StartTime, double EndTime, double LyricEndTime);
@@ -545,24 +497,12 @@ public static partial class TemperaProgramCompiler
                 Math.Max(line.StartTime, Math.Min(line.RenderEndTime, nextStart)), BuildSegments(line)));
         }
         var threshold = ResolveParagraphGapThreshold(lines);
-        var drafts = new List<ParagraphDraft>();
-        var current = new ParagraphDraft([], TemperaParagraphBoundary.SongStart);
-        for (var index = 0; index < compiled.Count; index++)
-        {
-            var line = compiled[index];
-            var previous = index > 0 ? compiled[index - 1] : null;
-            var gap = previous is null ? 0 : line.Line.StartTime - previous.RenderEndTime;
-            TemperaParagraphBoundary? boundary = previous is not null && MetadataChanged(previous.Line, line.Line)
-                ? TemperaParagraphBoundary.Metadata
-                : previous is not null && gap >= threshold ? TemperaParagraphBoundary.TimeGap : null;
-            if (boundary is { } cut && current.Lines.Count > 0)
-            {
-                drafts.AddRange(SplitOversizedDraft(current));
-                current = new ParagraphDraft([], cut);
-            }
-            current.Lines.Add(line);
-        }
-        if (current.Lines.Count > 0) drafts.AddRange(SplitOversizedDraft(current));
+        var drafts = LyricParagraphScheduler.PartitionParagraphs(
+            compiled, threshold,
+            line => line.Line.StartTime,
+            line => line.RenderEndTime,
+            (prev, curr) => MetadataChanged(prev.Line, curr.Line),
+            6, 18);
 
         var threads = new Threads();
         TemperaTransitionKind? previousTransition = null;
@@ -571,7 +511,7 @@ public static partial class TemperaProgramCompiler
         {
             var draft = drafts[index];
             var kind = Classify(draft.Lines, index, drafts.Count);
-            var shots = BuildShots(draft.Lines, compiled, kind, index, seed, threads, wholeLineLyrics);
+            var shots = BuildShots(draft.Lines.ToList(), compiled, kind, index, seed, threads, wholeLineLyrics);
             var next = index + 1 < drafts.Count ? drafts[index + 1] : null;
             var endTime = draft.Lines[^1].RenderEndTime;
             var gap = next is null ? 0 : next.Lines[0].Line.StartTime - endTime;
@@ -589,7 +529,7 @@ public static partial class TemperaProgramCompiler
             // Long enough for the graphics to carry the cut, never eating more than ~0.3 s into the outgoing tail.
             var duration = next is not null ? Math.Min(1, Math.Max(0.35, Math.Max(gap, 0) + 0.3)) : 0;
             var transitionEnd = next?.Lines[0].Line.StartTime ?? endTime;
-            paragraphs.Add(new TemperaParagraph($"tempera-p{index}", kind, draft.Boundary, draft.Lines[0].Line.StartTime, endTime,
+            paragraphs.Add(new TemperaParagraph($"tempera-p{index}", kind, (TemperaParagraphBoundary)(int)draft.Boundary, draft.Lines[0].Line.StartTime, endTime,
                 draft.Lines, shots, transitionKind is { } transition
                     ? new TemperaTransition(transition, Math.Max(draft.Lines[0].Line.StartTime, transitionEnd - duration), transitionEnd)
                     : null));

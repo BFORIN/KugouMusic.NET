@@ -14,14 +14,11 @@ internal static class SonnetTokenizer
 {
     public static SonnetTextElement[] Elements(string text)
     {
-        var result = new List<SonnetTextElement>();
-        var enumerator = StringInfo.GetTextElementEnumerator(text);
-        while (enumerator.MoveNext())
-        {
-            var value = enumerator.GetTextElement();
-            result.Add(new SonnetTextElement(value, enumerator.ElementIndex, enumerator.ElementIndex + value.Length));
-        }
-        return result.ToArray();
+        var raw = LyricTokenizer.Elements(text);
+        var result = new SonnetTextElement[raw.Length];
+        for (var i = 0; i < raw.Length; i++)
+            result[i] = new SonnetTextElement(raw[i].Text, raw[i].Start, raw[i].End);
+        return result;
     }
 
     public static SonnetLanguage SongLanguage(IReadOnlyList<SonnetLine> lines)
@@ -34,24 +31,15 @@ internal static class SonnetTokenizer
             else if (line.LanguageHint == SonnetLanguage.Chinese) chinese++;
             else if (line.LanguageHint == SonnetLanguage.Auto)
             {
-                if (line.FullText.EnumerateRunes().Any(IsKana)) japanese++;
-                else if (line.FullText.EnumerateRunes().Any(IsHan)) chinese++;
+                if (line.FullText.EnumerateRunes().Any(EffectTextMetrics.IsKana)) japanese++;
+                else if (line.FullText.EnumerateRunes().Any(EffectTextMetrics.IsHan)) chinese++;
             }
         }
         return japanese > chinese ? SonnetLanguage.Japanese : SonnetLanguage.Chinese;
     }
 
-    public static SonnetLanguage SongLanguage(IEnumerable<string> lines)
-    {
-        var japanese = 0;
-        var chinese = 0;
-        foreach (var line in lines)
-        {
-            if (line.EnumerateRunes().Any(IsKana)) japanese++;
-            else if (line.EnumerateRunes().Any(IsHan)) chinese++;
-        }
-        return japanese > chinese ? SonnetLanguage.Japanese : SonnetLanguage.Chinese;
-    }
+    public static SonnetLanguage SongLanguage(IEnumerable<string> lines) =>
+        LyricTokenizer.DetectLanguage(lines) == LyricLanguage.Japanese ? SonnetLanguage.Japanese : SonnetLanguage.Chinese;
 
     public static List<SonnetToken> Tokenize(SonnetLine line, SonnetTextElement[] elements, SonnetLanguage songLanguage) =>
         Tokenize(line.FullText, elements, songLanguage, line.LanguageHint);

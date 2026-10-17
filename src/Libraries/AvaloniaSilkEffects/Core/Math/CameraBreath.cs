@@ -1,15 +1,16 @@
 using System;
+using System.Runtime.CompilerServices;
 
 // 统一的手持摄像机呼吸微动发生器：提供多频正弦叠加的手持微晃动与歌词展开后的平滑淡入加权
 
 namespace AvaloniaSilkEffects;
 
-public readonly record struct EffectCameraBreathFrame(double X, double Y, double Scale, double Rotation);
+public readonly record struct CameraBreathFrame(double X, double Y, double Scale, double Rotation);
 
 /// <summary>
 /// Folia 手持相机微动（Camera Breath）与浮动生成器。
 /// </summary>
-public static class EffectCameraBreath
+public static class CameraBreath
 {
     public const double DefaultMaxOffset = 0.006;
     public const double DefaultMaxScale = 0.002;
@@ -18,7 +19,8 @@ public static class EffectCameraBreath
     /// <summary>
     /// 计算指定绝对时间与相位下的手持摄像机呼吸微晃动。
     /// </summary>
-    public static EffectCameraBreathFrame Calculate(
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static CameraBreathFrame Calculate(
         double time,
         double phase = 0,
         double maxOffset = DefaultMaxOffset,
@@ -26,7 +28,7 @@ public static class EffectCameraBreath
         double maxRotation = DefaultMaxRotation)
     {
         var tau = time * Math.PI * 2;
-        return new EffectCameraBreathFrame(
+        return new CameraBreathFrame(
             (Math.Sin(tau * 0.13 + phase) * 0.65 + Math.Sin(tau * 0.31 + phase * 1.7) * 0.35) * maxOffset,
             (Math.Cos(tau * 0.11 + phase * 2.3) * 0.65 + Math.Sin(tau * 0.29 + phase * 0.9) * 0.35) * maxOffset,
             Math.Sin(tau * 0.09 + phase * 1.3) * maxScale,
@@ -36,6 +38,7 @@ public static class EffectCameraBreath
     /// <summary>
     /// 歌词展开完成后的呼吸权重平滑爬升，避免在中途突然介入晃动。
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Weight(
         double time,
         double revealDoneTime,
@@ -48,4 +51,24 @@ public static class EffectCameraBreath
         var progress = EffectMath.Clamp01((time - revealDoneTime) / rampDuration);
         return useCubic ? EffectEasing.EaseInOutCubic(progress) : EffectEasing.EaseInOut(progress);
     }
+}
+
+public static class EffectCameraBreath
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static CameraBreathFrame Calculate(
+        double time,
+        double phase = 0,
+        double maxOffset = CameraBreath.DefaultMaxOffset,
+        double maxScale = CameraBreath.DefaultMaxScale,
+        double maxRotation = CameraBreath.DefaultMaxRotation) =>
+        CameraBreath.Calculate(time, phase, maxOffset, maxScale, maxRotation);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Weight(
+        double time,
+        double revealDoneTime,
+        double rampDuration = 1.2,
+        bool useCubic = false) =>
+        CameraBreath.Weight(time, revealDoneTime, rampDuration, useCubic);
 }

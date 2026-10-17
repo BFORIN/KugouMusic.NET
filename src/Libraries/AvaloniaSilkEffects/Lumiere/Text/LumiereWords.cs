@@ -1,4 +1,6 @@
-using AvaloniaSilkEffects.Sonnet;
+using AvaloniaSilkEffects.Lyrics.Segmentation;
+
+// Lumiere 歌词单词切分：复用统一的歌词词库分词引擎
 
 namespace AvaloniaSilkEffects.Lumiere.Text;
 
@@ -6,17 +8,14 @@ namespace AvaloniaSilkEffects.Lumiere.Text;
 public readonly record struct LumiereWordSpan(string Text, int Start, int End, bool Blank);
 
 /// <summary>
-/// Folia text/wordStyle.ts segmentWords. Folia goes through Intl.Segmenter (ICU dictionary words, isWordLike);
-/// here Sonnet's tokenizer does the same job: dictionary words for Chinese, a model for Japanese, scanner runs
-/// for Latin, with whitespace, punctuation and symbols marked as not word-like.
+/// Folia text/wordStyle.ts segmentWords: 统一通过 LyricTokenizer 调用中日文专业词库分词。
 /// </summary>
 public static class LumiereWords
 {
     public static IReadOnlyList<LumiereWordSpan> Segment(string text)
     {
         if (string.IsNullOrEmpty(text)) return [];
-        var elements = SonnetTokenizer.Elements(text);
-        var tokens = SonnetTokenizer.Tokenize(text, elements, SonnetTokenizer.SongLanguage([text]));
-        return [.. tokens.Select(token => new LumiereWordSpan(token.Word.Text, token.Start, token.End, !token.IsWord))];
+        var tokens = LyricTokenizer.Tokenize(text);
+        return [.. tokens.Select(token => new LumiereWordSpan(token.Text, token.Start, token.End, !token.IsWord))];
     }
 }

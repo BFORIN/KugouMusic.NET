@@ -230,86 +230,44 @@ public static partial class LumiereProgramCompiler
 
     // ---- structure (lumiereStructure.ts) ---------------------------------------------------------------------
 
-    private static double Median(List<double> values)
-    {
-        if (values.Count == 0) return 0.5;
-        values.Sort();
-        var middle = values.Count / 2;
-        return values.Count % 2 == 0 ? (values[middle - 1] + values[middle]) / 2 : values[middle];
-    }
-
-    public static double GapThreshold(IReadOnlyList<LumiereLine> lines)
-    {
-        var gaps = new List<double>();
-        for (var index = 1; index < lines.Count; index++)
-        {
-            var gap = lines[index].StartTime - Math.Min(lines[index - 1].RenderEndTime, lines[index].StartTime);
-            if (gap > 0) gaps.Add(gap);
-        }
-        return Math.Clamp(Median(gaps) * GapMultiplier, GapMin, GapMax);
-    }
+    public static double GapThreshold(IReadOnlyList<LumiereLine> lines) =>
+        LyricParagraphScheduler.ResolveParagraphGapThreshold(lines, line => line.StartTime, line => line.RenderEndTime);
 
     private static bool MetadataChanged(LumiereLine previous, LumiereLine next) =>
         previous.BlockIndex is { } a && next.BlockIndex is { } b && a != b
         || previous.SongPart is { } p && next.SongPart is { } q && p != q;
 
-    private static List<Draft> SplitOversized(Draft draft)
-    {
-        var output = new List<Draft>();
-        var remaining = draft.Lines;
-        var boundary = draft.Boundary;
-        var guard = 0;
-        while (remaining.Count > MaxParagraphLines
-               || remaining.Count > 1 && remaining[^1].RenderEndTime - remaining[0].Line.StartTime > MaxParagraphDuration)
-        {
-            if (guard++ > 1000) break;
-            var candidates = new List<(int SplitIndex, double Gap)>();
-            for (var offset = 0; offset + 2 < remaining.Count - 1; offset++)
-                candidates.Add((offset + 2, remaining[offset + 2].Line.StartTime - remaining[offset + 1].RenderEndTime));
-            var valid = candidates.Where(candidate => !double.IsNaN(candidate.Gap)).OrderByDescending(candidate => candidate.Gap).ToList();
-            var splitIndex = Math.Max(1, valid.Count > 0 ? valid[0].SplitIndex : Math.Min(4, remaining.Count - 1));
-            output.AddRange(SplitOversized(new Draft(remaining[..splitIndex], boundary)));
-            remaining = remaining[splitIndex..];
-            boundary = output[^1].Lines.Count >= MaxParagraphLines ? LumiereParagraphBoundary.LineCap : LumiereParagraphBoundary.DurationCap;
-        }
-        output.Add(new Draft(remaining, boundary));
-        return output;
-    }
-
     private static List<Draft> DraftParagraphs(List<StructureLine> lines, double threshold)
     {
-        var drafts = new List<Draft>();
-        var current = new Draft([], LumiereParagraphBoundary.SongStart);
-        for (var index = 0; index < lines.Count; index++)
+        var drafts = LyricParagraphScheduler.PartitionParagraphs(
+            lines, threshold,
+            line => line.Line.StartTime,
+            line => line.RenderEndTime,
+            (prev, curr) => MetadataChanged(prev.Line, curr.Line),
+            MaxParagraphLines, MaxParagraphDuration);
+
+        return drafts.Select(d => new Draft(d.Lines.ToList(), d.Boundary switch
         {
-            var line = lines[index];
-            var previous = index > 0 ? lines[index - 1] : null;
-            var gap = previous is null ? 0 : line.Line.StartTime - previous.RenderEndTime;
-            LumiereParagraphBoundary? boundary = previous is not null && MetadataChanged(previous.Line, line.Line)
-                ? LumiereParagraphBoundary.Metadata
-                : previous is not null && gap >= threshold ? LumiereParagraphBoundary.TimeGap : null;
-            if (boundary is { } b && current.Lines.Count > 0)
-            {
-                drafts.AddRange(SplitOversized(current));
-                current = new Draft([], b);
-            }
-            current.Lines.Add(line);
-        }
-        if (current.Lines.Count > 0) drafts.AddRange(SplitOversized(current));
-        return drafts;
+            EffectParagraphBoundary.Metadata => LumiereParagraphBoundary.Metadata,
+            EffectParagraphBoundary.TimeGap => LumiereParagraphBoundary.TimeGap,
+            EffectParagraphBoundary.LineCap => LumiereParagraphBoundary.LineCap,
+            EffectParagraphBoundary.DurationCap => LumiereParagraphBoundary.DurationCap,
+            _ => LumiereParagraphBoundary.SongStart,
+        })).ToList();
     }
 
     private static LumiereParagraphKind Classify(List<StructureLine> lines, int index, int total)
     {
-        if (lines.Any(item => item.Line.IsChorus || ChorusPart().IsMatch(item.Line.SongPart ?? ""))) return LumiereParagraphKind.Chorus;
-        if (lines.Any(item => BreakPart().IsMatch(item.Line.SongPart ?? ""))) return LumiereParagraphKind.Break;
-        if (index == total - 1) return LumiereParagraphKind.Outro;
-        var duration = lines[^1].RenderEndTime - lines[0].Line.StartTime;
-        var segments = lines.Sum(line => LumiereWords.Segment(line.Line.Text).Count(word => !word.Blank));
-        var punctuation = lines.Sum(line => Exclamation().Count(line.Line.Text));
-        if (duration <= 3.5 || segments <= 3) return LumiereParagraphKind.Breath;
-        if (punctuation >= 2 || segments / Math.Max(duration, 1) > 2.5) return LumiereParagraphKind.Lift;
-        return LumiereParagraphKind.Verse;
+        var kind = LyricParagraphScheduler.ClassifyParagraph(
+            lines, index, total,
+            line => line.Line.Text,
+            line => line.Line.StartTime,
+            line => line.RenderEndTime,
+            line => line.Line.SongPart,
+            line => line.Line.IsChorus,
+            line => LumiereWords.Segment(line.Line.Text).Count(word => !word.Blank));
+
+        return (LumiereParagraphKind)(int)kind;
     }
 
     // ---- shots (program.ts) ----------------------------------------------------------------------------------

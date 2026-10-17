@@ -15,25 +15,8 @@ public sealed record LumiereLine(string Text, double StartTime, double EndTime, 
     /// Folia utils/lyrics/renderHints.ts: the latest point a visualizer may keep the line for pass / exit polish after the
     /// reveal (≥ EndTime). Micro lines (&lt; 0.1 s) get a floor, short ones (&lt; 0.18 s) a fast exit.
     /// </summary>
-    public double RenderEndTime
-    {
-        get
-        {
-            var raw = Math.Max(EndTime - StartTime, 0);
-            if (raw < 0.10) return Math.Max(EndTime, StartTime + 0.067);
-            var lastWordEnd = Words.Count > 0 ? Words[^1].EndTime : EndTime;
-            if (raw < 0.18)
-            {
-                var enter = Math.Clamp(raw * 0.45, 0.045, 0.06);
-                var exitFast = Math.Clamp(raw * 0.22, 0.03, 0.04);
-                var passFast = Math.Max(lastWordEnd, StartTime) + 0.03;
-                return Math.Max(EndTime, Math.Max(StartTime + enter + 0.01, Math.Max(passFast, EndTime - exitFast)) + exitFast);
-            }
-            var exit = Math.Min(0.32, Math.Max(0.18, Math.Max(raw, 0.12) * 0.18));
-            var pass = Math.Max(lastWordEnd, StartTime) + 0.06;
-            return Math.Max(EndTime, Math.Max(pass, EndTime - exit) + exit);
-        }
-    }
+    public double RenderEndTime => LyricTimingHelper.CalculateRenderEndTime(
+        StartTime, EndTime, Words.Count > 0 ? Words[^1].EndTime : null);
 }
 
 /// <summary>Start and end of one grapheme being sung.</summary>

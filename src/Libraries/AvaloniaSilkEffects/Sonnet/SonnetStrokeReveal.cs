@@ -20,12 +20,7 @@ internal sealed class SonnetStrokeReveal
         if (node is ShapeNode { Shape: EffectShapeKind.Line } line)
             _strokes.Add(new Stroke(line, line.Size, []));
         else if (node is PolylineNode { Points.Count: >= 2 } curve)
-        {
-            var distances = new float[curve.Points.Count];
-            for (var i = 1; i < distances.Length; i++)
-                distances[i] = distances[i - 1] + Vector2.Distance(curve.Points[i - 1], curve.Points[i]);
-            _strokes.Add(new Stroke(curve, Vector2.Zero, distances));
-        }
+            _strokes.Add(new Stroke(curve, Vector2.Zero, PolylineTrimmer.CalculateDistances(curve.Points)));
         else if (node is PolygonNode or ShapeNode)
             _fills.Add((node, node.Alpha));
     }
@@ -58,12 +53,9 @@ internal sealed class SonnetStrokeReveal
             else if (stroke.Node is PolylineNode curve)
             {
                 var target = stroke.Distances[^1] * eased;
-                var end = 1;
-                while (end < stroke.Distances.Length - 1 && stroke.Distances[end] < target) end++;
-                var fraction = Math.Clamp((target - stroke.Distances[end - 1]) /
-                    Math.Max(0.000001f, stroke.Distances[end] - stroke.Distances[end - 1]), 0, 1);
-                curve.EndPointIndex = end;
-                curve.EndPositionOverride = Vector2.Lerp(curve.Points[end - 1], curve.Points[end], fraction);
+                var trimmed = PolylineTrimmer.SampleTrimmedEnd(curve.Points, stroke.Distances, target);
+                curve.EndPointIndex = trimmed.EndIndex;
+                curve.EndPositionOverride = trimmed.Position;
             }
         }
     }

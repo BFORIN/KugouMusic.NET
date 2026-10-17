@@ -1,4 +1,8 @@
-namespace AvaloniaSilkEffects.Tempera.Geometry;
+using System.Numerics;
+
+// 统一的多边形三角化器：基于 mapbox/earcut 3.0.2 移植，支持凹多边形、带洞多边形及自交容错
+
+namespace AvaloniaSilkEffects;
 
 /// <summary>
 /// mapbox/earcut 3.0.2, line for line (from three.js's vendored copy) — the triangulator Pixi 8 fills every polygon with,
@@ -18,6 +22,56 @@ public static class Earcut
         public Node? PrevZ;
         public Node? NextZ;
         public bool Steiner;
+    }
+
+    /// <summary>
+    /// 三角化二维点轮廓，统一供场景几何体与网格生成使用。
+    /// </summary>
+    public static int[] Triangulate(IReadOnlyList<Vector2> points)
+    {
+        var remaining = new List<int>(points.Count);
+        for (var i = 0; i < points.Count; i++)
+        {
+            if (!float.IsFinite(points[i].X) || !float.IsFinite(points[i].Y))
+                throw new ArgumentException("Polygon coordinates must be finite.", nameof(points));
+            if (remaining.Count == 0 || points[i] != points[remaining[^1]]) remaining.Add(i);
+        }
+        if (remaining.Count > 1 && points[remaining[0]] == points[remaining[^1]]) remaining.RemoveAt(remaining.Count - 1);
+        
+        // 过滤共线冗余顶点
+        var changed = true;
+        while (changed && remaining.Count >= 3)
+        {
+            changed = false;
+            for (var i = 0; i < remaining.Count; i++)
+            {
+                var a = points[remaining[(i + remaining.Count - 1) % remaining.Count]];
+                var b = points[remaining[i]];
+                var c = points[remaining[(i + 1) % remaining.Count]];
+                if ((double)a.X * (b.Y - c.Y) + (double)b.X * (c.Y - a.Y) + (double)c.X * (a.Y - b.Y) == 0 &&
+                    Vector2.Dot(b - a, b - c) <= 0)
+                {
+                    remaining.RemoveAt(i);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (remaining.Count < 3) return [];
+
+        var data = new double[remaining.Count * 2];
+        for (var i = 0; i < remaining.Count; i++)
+        {
+            var p = points[remaining[i]];
+            data[i * 2] = p.X;
+            data[i * 2 + 1] = p.Y;
+        }
+
+        var localTriangles = Triangulate(data);
+        var result = new int[localTriangles.Count];
+        for (var i = 0; i < localTriangles.Count; i++)
+            result[i] = remaining[localTriangles[i]];
+        return result;
     }
 
     public static List<int> Triangulate(IReadOnlyList<double> data, IReadOnlyList<int>? holeIndices = null)

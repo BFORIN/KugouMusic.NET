@@ -2,56 +2,37 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Text;
 using SkiaSharp;
 
-// 统一的 SkiaSharp 文本测量服务：提供全局 Typeface 缓存、跨平台中文字体 Fallback、字形包围盒度量与带 LRU 的文本宽度测量
+// 统一的 SkiaSharp 文本测量服务：字形包围盒度量、带 LRU 缓存的文本宽度测量与 Unicode 语义分类
 
 namespace AvaloniaSilkEffects;
 
 /// <summary>
-/// 特效管线通用的文本排版度量与字体解析工具。
+/// 特效管线通用的文本排版度量与字符解析工具。
 /// </summary>
 public static class EffectTextMetrics
 {
     private const string MetricsSampleString = "|ÉqÅM";
     private const int DefaultMeasureCacheLimit = 20000;
 
-    private static readonly ConcurrentDictionary<(string Family, int Weight, string? SampleKey), SKTypeface> Typefaces = new();
     private static readonly ConcurrentDictionary<(string Family, int Weight), (float Ascent, float Descent)> BoxMetrics = new();
     private static readonly Dictionary<(string Family, int Weight, double FontSize, string Text), double> MeasureCache = [];
     private static readonly Queue<(string Family, int Weight, double FontSize, string Text)> MeasureOrder = new();
     private static readonly object MeasureLock = new();
 
     /// <summary>
-    /// 将整数权重（100..1000）转换为标准 SKFontStyle。
+    /// 将整数权重转换为 SKFontStyle。
     /// </summary>
     public static SKFontStyle ResolveFontStyle(int weight) =>
-        new(Math.Clamp(weight, 100, 1000), (int)SKFontStyleWidth.Normal, SKFontStyleSlant.Upright);
+        EffectTypefaceResolver.ResolveFontStyle(weight);
 
     /// <summary>
-    /// 获取指定字体族名、字重及采样文本下的最佳 SKTypeface（自动进行跨平台中文匹配及 LRU 缓存）。
+    /// 获取指定字体族名、字重及采样文本下的最佳 SKTypeface。
     /// </summary>
-    public static SKTypeface GetTypeface(string family, int weight, string? sampleText = null)
-    {
-        string? sampleKey = null;
-        if (!string.IsNullOrEmpty(sampleText))
-        {
-            foreach (var ch in sampleText)
-            {
-                if (ch > 127 && !char.IsWhiteSpace(ch))
-                {
-                    sampleKey = ch.ToString();
-                    break;
-                }
-            }
-        }
-
-        return Typefaces.GetOrAdd(
-            (family, weight, sampleKey),
-            static k => EffectTextureCache.ResolveTypeface(k.Family, ResolveFontStyle(k.Weight), k.SampleKey));
-    }
+    public static SKTypeface GetTypeface(string family, int weight, string? sampleText = null) =>
+        EffectTypefaceResolver.GetTypeface(family, weight, sampleText);
 
     /// <summary>
     /// 获取指定字体在 1 像素标准尺寸下的 (Ascent, Descent) 垂直包围盒度量。
