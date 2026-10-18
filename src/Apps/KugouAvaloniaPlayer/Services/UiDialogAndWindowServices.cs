@@ -72,7 +72,7 @@ public sealed class LoginDialogService(ISukiDialogManager dialogManager, IUiDisp
 
             dialogManager.CreateDialog()
                 .WithContent(loginView)
-                .WithActionButton("关闭", _ => { }, true, "Basic")
+                .WithActionButton("关闭", _ => { }, true, "Basic", "EscapeDialogCancelButton")
                 .TryShow();
         };
 

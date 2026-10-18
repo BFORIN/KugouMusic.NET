@@ -6,7 +6,7 @@
             <TextBlock x:Name="Description" FontSize="14" TextWrapping="Wrap" LineHeight="22" Foreground="{DynamicResource SukiLowText}" />
             <Border Height="1" Background="{DynamicResource SukiBorder}" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
-                <Button x:Name="CancelButton" Classes="Basic" Content="取消" MinWidth="80" />
+                <Button x:Name="CancelButton" Classes="Basic EscapeDialogCancelButton" Content="取消" MinWidth="80" />
                 <Button x:Name="ConfirmButton" Classes="Basic" MinWidth="112" Foreground="{DynamicResource SukiRed}" />
             </StackPanel>
         </StackPanel>

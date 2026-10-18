@@ -56,7 +56,7 @@ public sealed class CreatePlaylistDialogService(
             dialogManager.CreateDialog()
                 .WithTitle(title)
                 .WithContent(textBox)
-                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard")
+                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard", "EscapeDialogCancelButton")
                 .WithActionButton(confirmText, _ =>
                 {
                     var name = textBox.Text?.Trim();
@@ -124,7 +124,7 @@ public sealed class CreatePlaylistDialogService(
             dialogManager.CreateDialog()
                 .WithTitle("编辑本地歌单")
                 .WithContent(content)
-                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard")
+                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard", "EscapeDialogCancelButton")
                 .WithActionButton("保存", _ =>
                 {
                     var name = nameBox.Text?.Trim();
@@ -183,7 +183,7 @@ public sealed class CreatePlaylistDialogService(
             dialogManager.CreateDialog()
                 .WithTitle("连接 Jellyfin")
                 .WithContent(content)
-                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard")
+                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard", "EscapeDialogCancelButton")
                 .WithActionButton("连接", _ =>
                 {
                     var serverUrl = serverBox.Text?.Trim();
@@ -232,7 +232,7 @@ public sealed class CreatePlaylistDialogService(
             dialogManager.CreateDialog()
                 .WithTitle("导入 Jellyfin")
                 .WithContent(content)
-                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard")
+                .WithActionButton("取消", _ => { tcs.TrySetResult(null); }, true, "Standard", "EscapeDialogCancelButton")
                 .WithActionButton("导入", _ =>
                 {
                     tcs.TrySetResult(comboBox.SelectedItem as JellyfinLibrary);

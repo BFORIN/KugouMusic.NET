@@ -86,7 +86,7 @@
 
             <!-- 关闭按钮 -->
             <Button Grid.Row="2"
-                    Classes="Basic"
+                    Classes="Basic EscapeDialogCancelButton"
                     Command="{Binding CancelCommand}"
                     Cursor="Hand"
                     HorizontalAlignment="Right"

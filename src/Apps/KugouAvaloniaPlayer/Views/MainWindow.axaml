@@ -212,7 +212,7 @@
                        BackgroundStyle="Bubble">
         <suki:SukiMainHost.Hosts>
             <suki:SukiToastHost Manager="{Binding ToastManager}" />
-            <suki:SukiDialogHost Manager="{Binding DialogManager}" />
+            <suki:SukiDialogHost x:Name="DialogHost" Manager="{Binding DialogManager}" />
         </suki:SukiMainHost.Hosts>
 
     <Grid Name="MainGrid">

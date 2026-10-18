@@ -211,7 +211,7 @@
 
                 <Button Grid.Column="1"
                         Command="{Binding CancelCommand}"
-                        Classes="Basic"
+                        Classes="Basic EscapeDialogCancelButton"
                         Margin="0,0,10,0">
                     <TextBlock Text="取消" />
                 </Button>

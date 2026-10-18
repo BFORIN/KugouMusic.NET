@@ -296,7 +296,7 @@
                            Foreground="{DynamicResource SukiLowText}" />
 
                 <Button Grid.Column="1"
-                        Classes="Basic"
+                        Classes="Basic EscapeDialogCancelButton"
                         Command="{Binding CancelCommand}"
                         Cursor="Hand">
                     <TextBlock Text="关闭" />

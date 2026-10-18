@@ -46,7 +46,7 @@
 
             <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
                         Spacing="8" Margin="0,14,0,0">
-                <Button Classes="Basic" Command="{Binding CancelCommand}" Cursor="Hand">
+                <Button Classes="Basic EscapeDialogCancelButton" Command="{Binding CancelCommand}" Cursor="Hand">
                     <TextBlock Text="关闭" />
                 </Button>
                 <Button Command="{Binding UseTemporaryCommand}" Cursor="Hand">

@@ -8,6 +8,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using KugouAvaloniaPlayer.Models;
 using KugouAvaloniaPlayer.Services;
@@ -52,11 +53,40 @@ public partial class MainWindow : KugouWindow
     {
         base.OnKeyDown(e);
 
-        // Let focused controls handle Escape first, and never navigate behind a dialog.
+        // Let focused controls handle Escape first.
         if (e.Handled || e.Key != Key.Escape || e.KeyModifiers != KeyModifiers.None ||
-            DataContext is not MainWindowViewModel vm ||
-            _isDialogOpen)
+            DataContext is not MainWindowViewModel vm)
             return;
+
+        if (_isDialogOpen)
+        {
+            // Use the existing cancel action so pending results and cleanup run as usual.
+            // Consume Escape even when cancellation is disabled or unavailable (e.g. progress dialogs).
+            e.Handled = true;
+            foreach (var visual in DialogHost.GetVisualDescendants())
+            {
+                if (visual is not Button { IsEffectivelyVisible: true } button ||
+                    !button.Classes.Contains("EscapeDialogCancelButton"))
+                    continue;
+
+                if (button.IsEffectivelyEnabled)
+                {
+                    if (button.Command is { } command)
+                    {
+                        if (command.CanExecute(button.CommandParameter))
+                            command.Execute(button.CommandParameter);
+                    }
+                    else
+                    {
+                        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    }
+                }
+
+                return;
+            }
+
+            return;
+        }
 
         if (vm.NowPlaying.IsOpen)
         {
