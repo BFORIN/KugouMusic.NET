@@ -89,14 +89,14 @@
                        Classes="NowPlayingBackgroundLayer" />
                 <Image behaviors:NowPlayingRemoteImageBehavior.Source="{Binding PortraitBackgroundA, Converter={StaticResource RemoteImageSourceConverter}}"
                        behaviors:NowPlayingRemoteImageBehavior.IsEnabled="{Binding IsOpen}"
+                       behaviors:NowPlayingRemoteImageBehavior.DecodePixelWidth="1280"
                        Stretch="UniformToFill"
-                       Margin="-96"
                        Opacity="{Binding PortraitLayerAOpacity}"
                        Classes="NowPlayingBackgroundLayer" />
                 <Image behaviors:NowPlayingRemoteImageBehavior.Source="{Binding PortraitBackgroundB, Converter={StaticResource RemoteImageSourceConverter}}"
                        behaviors:NowPlayingRemoteImageBehavior.IsEnabled="{Binding IsOpen}"
+                       behaviors:NowPlayingRemoteImageBehavior.DecodePixelWidth="1280"
                        Stretch="UniformToFill"
-                       Margin="-96"
                        Opacity="{Binding PortraitLayerBOpacity}"
                        Classes="NowPlayingBackgroundLayer" />
             </Panel>

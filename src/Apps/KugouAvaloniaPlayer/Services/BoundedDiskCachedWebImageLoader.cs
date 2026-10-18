@@ -57,23 +57,39 @@ public sealed class BoundedDiskCachedWebImageLoader(
 
     public override async Task<Bitmap?> ProvideImageAsync(string url)
     {
-        return await ProvideImageAsync(url, null).ConfigureAwait(false);
+        return await ProvideImageAsync(url, (IStorageProvider?)null).ConfigureAwait(false);
     }
 
     public override async Task<Bitmap?> ProvideImageAsync(string url, IStorageProvider? storageProvider = null)
+    {
+        return await ProvideImageWithDecodeWidthAsync(url, null).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    ///     获取远程图片，并可在解码阶段限制宽度，用于控制大图的解码内存；
+    ///     decodePixelWidth 非正时保持原始尺寸。
+    /// </summary>
+    public async Task<Bitmap?> ProvideImageAsync(string url, int? decodePixelWidth)
+    {
+        return await ProvideImageWithDecodeWidthAsync(url, decodePixelWidth).ConfigureAwait(false);
+    }
+
+    private async Task<Bitmap?> ProvideImageWithDecodeWidthAsync(string url, int? decodePixelWidth)
     {
         if (LocalImageSourceHelper.TryGetEmbeddedCoverFilePath(url, out var embeddedTrackPath))
             return await GetEmbeddedCoverBitmapAsync(url, embeddedTrackPath!).ConfigureAwait(false);
 
         if (!IsWebUrl(url))
-            return await base.ProvideImageAsync(url, storageProvider).ConfigureAwait(false);
+            return await base.ProvideImageAsync(url, storageProvider: null).ConfigureAwait(false);
 
         var bytes = await GetExternalImageBytesAsync(url).ConfigureAwait(false);
         if (bytes is not { Length: > 0 })
             return null;
 
         using var stream = new MemoryStream(bytes, writable: false);
-        return new Bitmap(stream);
+        return decodePixelWidth is > 0
+            ? Bitmap.DecodeToWidth(stream, decodePixelWidth.Value, BitmapInterpolationMode.HighQuality)
+            : new Bitmap(stream);
     }
 
     private async Task<Bitmap?> GetEmbeddedCoverBitmapAsync(string sourceKey, string trackPath)
