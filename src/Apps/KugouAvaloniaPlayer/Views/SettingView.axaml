@@ -21,19 +21,31 @@
                         </Grid>
                     </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
-                <Border Grid.RowSpan="2" Width="1" HorizontalAlignment="Right" Margin="0,0,-12,0" Background="{DynamicResource SukiBorder}" Opacity="0.6" />
+                <Border Grid.RowSpan="2" Width="1" HorizontalAlignment="Right" Margin="0,0,-12,0" Background="{DynamicResource SettingsDivider}" />
             </Grid>
-            <Grid Grid.Column="1" x:Name="ContentGrid" RowDefinitions="Auto,*" RowSpacing="16">
-                <StackPanel Spacing="12">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBlock x:Name="CategoryTitle" Text="{Binding SelectedCategory.Title}" FontSize="24" FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center" />
-                        <ComboBox x:Name="CompactNavigation" Classes="SettingsCategoryPicker" IsVisible="False" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}">
+            <Grid Grid.Column="1" x:Name="ContentGrid" RowDefinitions="Auto,*" RowSpacing="18" MaxWidth="880">
+                <StackPanel Spacing="16" Margin="0,2,8,0">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                        <Border Classes="HeaderIconTile"><PathIcon Data="{Binding SelectedCategory.Icon}" /></Border>
+                        <StackPanel Grid.Column="1" x:Name="CategoryHeading" VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding SelectedCategory.Title}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding SelectedCategory.Description}" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ComboBox Grid.Column="1" x:Name="CompactNavigation" Classes="SettingsCategoryPicker" IsVisible="False" MaxWidth="Infinity" HorizontalAlignment="Stretch" VerticalAlignment="Center" ItemsSource="{Binding Categories}" SelectedItem="{Binding SelectedCategory}">
                             <ComboBox.ItemTemplate><DataTemplate x:DataType="models:SettingsCategory"><TextBlock Text="{Binding Title}" /></DataTemplate></ComboBox.ItemTemplate>
                         </ComboBox>
-                        <Button Grid.Column="1" Classes="Basic EscapeBackButton" Content="返回" ToolTip.Tip="返回" Command="{Binding $parent[local:KugouWindow].((vm:MainWindowViewModel)DataContext).NavigateBackCommand}" />
+                        <Button Grid.Column="2" Classes="Basic EscapeBackButton" ToolTip.Tip="返回" VerticalAlignment="Center" Command="{Binding $parent[local:KugouWindow].((vm:MainWindowViewModel)DataContext).NavigateBackCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <PathIcon Data="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z" Width="14" Height="14" />
+                                <TextBlock Text="返回" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
-                    <ComboBox IsVisible="{Binding IsLyricsSection}" ItemsSource="{Binding LyricSections}" SelectedItem="{Binding SelectedLyricSection}" HorizontalAlignment="Left" MinWidth="160" />
-                    <Border Height="1" Background="{DynamicResource SukiBorder}" />
+                    <Border Classes="SettingsTabs" IsVisible="{Binding IsLyricsSection}">
+                        <ListBox Classes="SettingsTabs" ItemsSource="{Binding LyricSections}" SelectedItem="{Binding SelectedLyricSection}">
+                            <ListBox.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock Classes="TabText" Text="{Binding .}" /></DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
                 </StackPanel>
                 <ScrollViewer Grid.Row="1" x:Name="ContentScroll" HorizontalScrollBarVisibility="Disabled" Padding="0,0,8,8">
                     <StackPanel>

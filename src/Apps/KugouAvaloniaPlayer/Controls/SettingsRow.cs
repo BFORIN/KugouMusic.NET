@@ -14,9 +14,9 @@ public sealed class SettingsRow : Grid
     private bool? _compact;
     public SettingsRow()
     {
+        // Margin comes from SettingsStyles so rows inside a SettingsCard get card padding.
         ColumnSpacing = 16;
         RowSpacing = 10;
-        Margin = new Thickness(0, 8);
     }
     protected override Size MeasureOverride(Size availableSize)
     {
@@ -26,7 +26,7 @@ public sealed class SettingsRow : Grid
             _widePositions = Children.Select(GetColumn).ToArray();
         }
         var simple = Children.Count == 2 && (Children[1] is ToggleSwitch or Button or TextBlock);
-        var compact = availableSize.Width < (simple ? 320 : 560);
+        var compact = availableSize.Width < (simple ? 280 : 440);
         if (_wideColumns != null && _compact != compact)
         {
             _compact = compact;

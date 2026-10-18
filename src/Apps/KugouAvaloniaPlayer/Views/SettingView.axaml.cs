@@ -22,7 +22,7 @@ public partial class SettingView : UserControl
     {
         var wide = Bounds.Width >= 760;
         SideNavigation.IsVisible = wide;
-        CategoryTitle.IsVisible = wide;
+        CategoryHeading.IsVisible = wide;
         CompactNavigation.IsVisible = !wide;
         LayoutGrid.ColumnDefinitions = new ColumnDefinitions(wide ? "188,*" : "*");
         Grid.SetColumn(ContentGrid, wide ? 1 : 0);

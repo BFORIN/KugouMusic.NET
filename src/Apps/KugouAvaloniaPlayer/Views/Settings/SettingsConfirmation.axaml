@@ -7,7 +7,7 @@
             <Border Height="1" Background="{DynamicResource SukiBorder}" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="12">
                 <Button x:Name="CancelButton" Classes="Basic EscapeDialogCancelButton" Content="取消" MinWidth="80" />
-                <Button x:Name="ConfirmButton" Classes="Basic" MinWidth="112" Foreground="{DynamicResource SukiRed}" />
+                <Button x:Name="ConfirmButton" Classes="Basic" MinWidth="112" Foreground="{DynamicResource SukiDangerColor}" />
             </StackPanel>
         </StackPanel>
     </suki:GlassCard>

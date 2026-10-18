@@ -1,8 +1,215 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="using:KugouAvaloniaPlayer.Controls" xmlns:suki="https://github.com/kikipoulet/SukiUI">
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="SettingsCardBackground" Color="#B3FFFFFF" />
+                    <SolidColorBrush x:Key="SettingsCardBorder" Color="#14000000" />
+                    <SolidColorBrush x:Key="SettingsDivider" Color="#0F000000" />
+                    <SolidColorBrush x:Key="SettingsKeycapBackground" Color="#0A000000" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="SettingsCardBackground" Color="#0FFFFFFF" />
+                    <SolidColorBrush x:Key="SettingsCardBorder" Color="#1AFFFFFF" />
+                    <SolidColorBrush x:Key="SettingsDivider" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="SettingsKeycapBackground" Color="#14FFFFFF" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+
     <Style Selector="TextBlock"><Setter Property="FontSize" Value="14" /></Style>
-    <Style Selector="ComboBox"><Setter Property="HorizontalAlignment" Value="Stretch" /><Setter Property="MinHeight" Value="36" /></Style>
+    <Style Selector="ComboBox"><Setter Property="HorizontalAlignment" Value="Stretch" /><Setter Property="MinHeight" Value="36" /><Setter Property="MinWidth" Value="150" /><Setter Property="MaxWidth" Value="280" /></Style>
     <Style Selector="Button"><Setter Property="MinHeight" Value="32" /></Style>
-    <Style Selector="local|SettingsRow"><Setter Property="Margin" Value="0,8" /><Setter Property="RowSpacing" Value="10" /></Style>
+    <Style Selector="local|SettingsRow"><Setter Property="Margin" Value="16,11" /><Setter Property="RowSpacing" Value="10" /><Setter Property="ColumnSpacing" Value="16" /><Setter Property="MinHeight" Value="38" /></Style>
+
+    <!-- Grouped cards: section label above a rounded surface whose rows are split by hairlines. -->
+    <Style Selector="local|SettingsCard">
+        <Setter Property="CardBackground" Value="{DynamicResource SettingsCardBackground}" />
+        <Setter Property="CardBorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+        <Setter Property="DividerBrush" Value="{DynamicResource SettingsDivider}" />
+        <Setter Property="Margin" Value="0,0,0,22" />
+    </Style>
+    <Style Selector="TextBlock.GroupHeader">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+        <Setter Property="Margin" Value="4,0,0,8" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+    </Style>
+    <Style Selector="Grid.GroupHeader">
+        <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+    <Style Selector="Grid.GroupHeader > Button">
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Bottom" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+    <Style Selector="TextBlock.RowTitle">
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.RowHint">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="0,3,0,0" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.RowValue">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="MinWidth" Value="48" />
+        <Setter Property="TextAlignment" Value="Right" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+        <Setter Property="FontFeatures" Value="+tnum" />
+    </Style>
+    <Style Selector="TextBlock.RowError">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="16,0,16,12" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiDangerColor}" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="StackPanel.RowSlider">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="Spacing" Value="10" />
+    </Style>
+    <Style Selector="StackPanel.RowSlider > Slider">
+        <Setter Property="Width" Value="200" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Expanded editor (color / font) nested under its mode row. -->
+    <Style Selector="StackPanel.RowDetail">
+        <Setter Property="Margin" Value="16,12,16,14" />
+        <Setter Property="Spacing" Value="10" />
+    </Style>
+    <Style Selector="Border.Swatch">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.PaletteSwatch">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="MinHeight" Value="26" />
+        <Setter Property="Margin" Value="0,0,8,8" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="13" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="RenderTransform" Value="scale(1)" />
+        <Setter Property="Transitions">
+            <Transitions><TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" /></Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.PaletteSwatch:pointerover">
+        <Setter Property="RenderTransform" Value="scale(1.15)" />
+    </Style>
+
+    <!-- Page header. -->
+    <Style Selector="Border.HeaderIconTile">
+        <Setter Property="Width" Value="44" />
+        <Setter Property="Height" Value="44" />
+        <Setter Property="CornerRadius" Value="13" />
+        <Setter Property="Background" Value="{DynamicResource SukiPrimaryColor10}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.HeaderIconTile > PathIcon">
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiPrimaryColor}" />
+    </Style>
+
+    <!-- Keyboard shortcut chip. -->
+    <Style Selector="Button.Keycap">
+        <Setter Property="MinWidth" Value="148" />
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+        <Setter Property="Background" Value="{DynamicResource SettingsKeycapBackground}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.Keycap TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+    </Style>
+    <Style Selector="Button.Keycap:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource SukiPrimaryColor}" />
+    </Style>
+
+    <!-- Small rounded label, e.g. version or membership. -->
+    <Style Selector="Border.Pill">
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="Background" Value="{DynamicResource SukiPrimaryColor10}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Border.Pill > TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiPrimaryColor}" />
+    </Style>
+
+    <!-- Lyrics sub-page switcher. -->
+    <Style Selector="Border.SettingsTabs">
+        <Setter Property="Background" Value="{DynamicResource SettingsCardBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SettingsCardBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="11" />
+        <Setter Property="Padding" Value="3" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="ListBox.SettingsTabs">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2" /></ItemsPanelTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.SettingsTabs ListBoxItem">
+        <Setter Property="Theme"><ControlTheme TargetType="ListBoxItem" /></Setter>
+        <Setter Property="Padding" Value="18,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Name="Fill" CornerRadius="8" Background="{DynamicResource SukiPrimaryColor}" Opacity="0">
+                        <Border.Transitions><Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.15" /></Transitions></Border.Transitions>
+                    </Border>
+                    <Border Name="Hover" CornerRadius="8" Background="{DynamicResource SukiText}" Opacity="0" />
+                    <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" Foreground="{TemplateBinding Foreground}" Margin="{TemplateBinding Padding}" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="ListBox.SettingsTabs ListBoxItem:pointerover /template/ Border#Hover">
+        <Setter Property="Opacity" Value="0.05" />
+    </Style>
+    <Style Selector="ListBox.SettingsTabs ListBoxItem:selected /template/ Border#Fill">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ListBox.SettingsTabs ListBoxItem:selected /template/ Border#Hover">
+        <Setter Property="Opacity" Value="0" />
+    </Style>
+    <Style Selector="ListBox.SettingsTabs TextBlock.TabText">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource SukiLowText}" />
+    </Style>
+    <Style Selector="ListBox.SettingsTabs ListBoxItem:pointerover TextBlock.TabText">
+        <Setter Property="Foreground" Value="{DynamicResource SukiText}" />
+    </Style>
+    <Style Selector="ListBox.SettingsTabs ListBoxItem:selected TextBlock.TabText">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
 
     <Style Selector="ListBox.SettingsNavigation">
         <Setter Property="Background" Value="Transparent" />

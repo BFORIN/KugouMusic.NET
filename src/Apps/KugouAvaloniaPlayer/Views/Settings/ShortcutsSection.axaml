@@ -1,34 +1,39 @@
-<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:suki="https://github.com/kikipoulet/SukiUI" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" xmlns:models="clr-namespace:KugouAvaloniaPlayer.Models" xmlns:simpleAudio="clr-namespace:SimpleAudio;assembly=SimpleAudio" xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia" xmlns:behaviors="using:KugouAvaloniaPlayer.Behaviors" x:Class="KugouAvaloniaPlayer.Views.Settings.ShortcutsSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
-    <StackPanel Spacing="16">
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6">
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" xmlns:behaviors="using:KugouAvaloniaPlayer.Behaviors" x:Class="KugouAvaloniaPlayer.Views.Settings.ShortcutsSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
+    <StackPanel>
+        <localControls:SettingsCard>
+            <localControls:SettingsRow ColumnDefinitions="*,Auto">
                 <StackPanel>
-                    <TextBlock Text="全局快捷键" FontWeight="Normal" TextWrapping="Wrap"/>
-                    <TextBlock Text="窗口隐藏后仍可使用；点击按键可重新录制。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="RowTitle" Text="启用全局快捷键" />
+                    <TextBlock Classes="RowHint" Text="窗口隐藏后仍可使用。" />
                 </StackPanel>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableGlobalShortcuts, Mode=TwoWay}"/>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableGlobalShortcuts, Mode=TwoWay}" />
             </localControls:SettingsRow>
-        </Border>
+        </localControls:SettingsCard>
+
+        <Grid Classes="GroupHeader" ColumnDefinitions="*,Auto">
+            <TextBlock Classes="GroupHeader" Text="按键绑定 · 点击按键可重新录制" TextWrapping="Wrap" />
+            <Button Grid.Column="1" Classes="Basic" Content="取消录制" Command="{Binding CancelShortcutRecordingCommand}" />
+        </Grid>
         <ItemsControl ItemsSource="{Binding ShortcutItems}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><localControls:SettingsCard /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="vm:GlobalShortcutItemViewModel">
-                    <Border BorderThickness="1" BorderBrush="{DynamicResource SukiBorder}" CornerRadius="10" Padding="12" Margin="0,4,0,0">
-                        <StackPanel Spacing="8">
-                            <localControls:SettingsRow ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-                                <TextBlock Text="{Binding DisplayName}" FontWeight="Normal" TextWrapping="Wrap"/>
-                                <Button Grid.Column="1" Classes="Basic" MinWidth="148" Command="{Binding #UserRoot.((vm:SettingViewModel)DataContext).BeginShortcutRecordingCommand}" CommandParameter="{Binding .}" behaviors:InteractionBehaviors.KeyDownCommand="{Binding #UserRoot.((vm:SettingViewModel)DataContext).CaptureShortcutKeyCommand}" behaviors:InteractionBehaviors.KeyDownCommandParameter="{Binding .}" LostFocus="OnRecordingLostFocus">
-                                    <TextBlock Text="{Binding ShortcutText}" TextWrapping="Wrap"/>
-                                </Button>
-                                <Button Grid.Column="2" Classes="Basic" MinWidth="72" Command="{Binding #UserRoot.((vm:SettingViewModel)DataContext).ClearShortcutCommand}" CommandParameter="{Binding .}">
-                                    <TextBlock Text="清空" TextWrapping="Wrap"/>
-                                </Button>
-                            </localControls:SettingsRow>
-                            <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasStatusMessage}" FontSize="12" Foreground="{Binding StatusForeground}" TextWrapping="Wrap"/>
+                    <localControls:SettingsRow ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <StackPanel>
+                            <TextBlock Classes="RowTitle" Text="{Binding DisplayName}" />
+                            <TextBlock Classes="RowHint" Text="{Binding StatusMessage}" IsVisible="{Binding HasStatusMessage}" Foreground="{Binding StatusForeground}" />
                         </StackPanel>
-                    </Border>
+                        <Button Grid.Column="1" Classes="Keycap" Command="{Binding #UserRoot.((vm:SettingViewModel)DataContext).BeginShortcutRecordingCommand}" CommandParameter="{Binding .}" behaviors:InteractionBehaviors.KeyDownCommand="{Binding #UserRoot.((vm:SettingViewModel)DataContext).CaptureShortcutKeyCommand}" behaviors:InteractionBehaviors.KeyDownCommandParameter="{Binding .}" LostFocus="OnRecordingLostFocus">
+                            <TextBlock Text="{Binding ShortcutText}" TextWrapping="Wrap" />
+                        </Button>
+                        <Button Grid.Column="2" Classes="Basic" ToolTip.Tip="清空" Command="{Binding #UserRoot.((vm:SettingViewModel)DataContext).ClearShortcutCommand}" CommandParameter="{Binding .}">
+                            <PathIcon Data="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" Width="12" Height="12" />
+                        </Button>
+                    </localControls:SettingsRow>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <Button Content="取消录制" Classes="Basic" HorizontalAlignment="Left" Command="{Binding CancelShortcutRecordingCommand}"/>
     </StackPanel>
 </UserControl>

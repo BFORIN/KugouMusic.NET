@@ -68,6 +68,9 @@ public partial class App : Application
                     DataContext = vm
                 };
                 desktop.MainWindow = mainWindow;
+#if DEBUG
+                DebugSnapshot.Attach(mainWindow, vm);
+#endif
 
                 void InitializeGlobalShortcuts(object? _, EventArgs __)
                 {

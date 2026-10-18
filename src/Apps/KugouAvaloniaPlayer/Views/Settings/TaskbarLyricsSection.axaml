@@ -1,83 +1,82 @@
-<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:suki="https://github.com/kikipoulet/SukiUI" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" xmlns:models="clr-namespace:KugouAvaloniaPlayer.Models" xmlns:simpleAudio="clr-namespace:SimpleAudio;assembly=SimpleAudio" xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia" xmlns:behaviors="using:KugouAvaloniaPlayer.Behaviors" x:Class="KugouAvaloniaPlayer.Views.Settings.TaskbarLyricsSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
-    <StackPanel Spacing="16">
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6">
-                <TextBlock Text="显示任务栏歌词" FontWeight="Normal" TextWrapping="Wrap"/>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableTaskbarLyrics, Mode=TwoWay}"/>
-            </localControls:SettingsRow>
-        </Border>
-        <Border Height="1" Background="{DynamicResource SukiBorder}" Margin="0,6"/>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" x:Class="KugouAvaloniaPlayer.Views.Settings.TaskbarLyricsSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
+    <StackPanel>
+        <TextBlock Classes="GroupHeader" Text="常规" />
+        <localControls:SettingsCard>
+            <localControls:SettingsRow ColumnDefinitions="*,Auto">
                 <StackPanel>
-                    <TextBlock Text="显示翻译" FontWeight="Normal" TextWrapping="Wrap"/>
-                    <TextBlock Text="关闭后放大主歌词。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="RowTitle" Text="显示任务栏歌词" />
+                    <TextBlock Classes="RowHint" Text="在任务栏空白处显示当前歌词。" />
                 </StackPanel>
-                <ToggleSwitch Grid.Column="1" IsChecked="{Binding TaskbarLyricsShowTranslation, Mode=TwoWay}"/>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableTaskbarLyrics, Mode=TwoWay}" />
             </localControls:SettingsRow>
-        </Border>
-        <Border Height="1" Background="{DynamicResource SukiBorder}" Margin="0,6"/>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
-                <TextBlock Text="对齐方式" FontWeight="Normal" TextWrapping="Wrap"/>
-                <ComboBox Grid.Column="1" MinWidth="120" ItemsSource="{Binding TaskbarLyricAlignmentOptions}" SelectedItem="{Binding TaskbarSelectedLyricAlignment}" MaxWidth="300"/>
-            </localControls:SettingsRow>
-        </Border>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
+            <localControls:SettingsRow ColumnDefinitions="*,Auto" IsEnabled="{Binding EnableTaskbarLyrics}">
                 <StackPanel>
-                    <TextBlock Text="水平微调" FontWeight="Normal" TextWrapping="Wrap"/>
-                    <TextBlock Text="负值左移，正值右移；方向键每次调整 1 像素。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="RowTitle" Text="显示翻译" />
+                    <TextBlock Classes="RowHint" Text="关闭后放大主歌词。" />
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Slider Width="180" Minimum="-200" Maximum="200" TickFrequency="1" SmallChange="1" LargeChange="20" IsSnapToTickEnabled="True" Value="{Binding TaskbarLyricsHorizontalOffset, Mode=TwoWay}" MaxWidth="300"/>
-                    <TextBlock MinWidth="52" VerticalAlignment="Center" Text="{Binding TaskbarLyricsHorizontalOffset, StringFormat={}{0} px}" TextWrapping="Wrap"/>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding TaskbarLyricsShowTranslation, Mode=TwoWay}" />
+            </localControls:SettingsRow>
+            <localControls:SettingsRow ColumnDefinitions="*,Auto" IsEnabled="{Binding EnableTaskbarLyrics}">
+                <TextBlock Classes="RowTitle" Text="对齐方式" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding TaskbarLyricAlignmentOptions}" SelectedItem="{Binding TaskbarSelectedLyricAlignment}" />
+            </localControls:SettingsRow>
+            <localControls:SettingsRow ColumnDefinitions="*,Auto" IsEnabled="{Binding EnableTaskbarLyrics}">
+                <StackPanel>
+                    <TextBlock Classes="RowTitle" Text="水平微调" />
+                    <TextBlock Classes="RowHint" Text="负值左移，正值右移；方向键每次调整 1 像素。" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Classes="RowSlider">
+                    <Slider Minimum="-200" Maximum="200" TickFrequency="1" SmallChange="1" LargeChange="20" IsSnapToTickEnabled="True" Value="{Binding TaskbarLyricsHorizontalOffset, Mode=TwoWay}" />
+                    <TextBlock Classes="RowValue" Text="{Binding TaskbarLyricsHorizontalOffset, StringFormat={}{0} px}" />
                 </StackPanel>
             </localControls:SettingsRow>
-        </Border>
-        <Border Height="1" Background="{DynamicResource SukiBorder}" Margin="0,6"/>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
-                <TextBlock Text="字体" FontWeight="Normal" TextWrapping="Wrap"/>
-                <ComboBox Grid.Column="1" MinWidth="120" ItemsSource="{Binding LyricFontFamilyOptions}" SelectedItem="{Binding TaskbarSelectedLyricFontFamily}" MaxWidth="300">
+        </localControls:SettingsCard>
+
+        <TextBlock Classes="GroupHeader" Text="文字" />
+        <localControls:SettingsCard IsEnabled="{Binding EnableTaskbarLyrics}">
+            <localControls:SettingsRow ColumnDefinitions="*,Auto">
+                <TextBlock Classes="RowTitle" Text="字体" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding LyricFontFamilyOptions}" SelectedItem="{Binding TaskbarSelectedLyricFontFamily}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate DataType="x:String">
-                            <TextBlock Text="{Binding .}" FontFamily="{Binding .}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding .}" FontFamily="{Binding .}" TextWrapping="Wrap" />
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
             </localControls:SettingsRow>
-        </Border>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
+            <localControls:SettingsRow ColumnDefinitions="*,Auto">
                 <StackPanel>
-                    <TextBlock Text="字号" FontWeight="Normal" TextWrapping="Wrap"/>
-                    <TextBlock Text="隐藏翻译时自动放大。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="RowTitle" Text="字号" />
+                    <TextBlock Classes="RowHint" Text="隐藏翻译时自动放大。" />
                 </StackPanel>
-                <ComboBox Grid.Column="1" MinWidth="120" ItemsSource="{Binding TaskbarLyricFontSizeOptions}" SelectedItem="{Binding TaskbarLyricsFontSize}" MaxWidth="300"/>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding TaskbarLyricFontSizeOptions}" SelectedItem="{Binding TaskbarLyricsFontSize}" />
             </localControls:SettingsRow>
-        </Border>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto,150,Auto" ColumnSpacing="8" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
+        </localControls:SettingsCard>
+
+        <Grid Classes="GroupHeader" ColumnDefinitions="*,Auto">
+            <TextBlock Classes="GroupHeader" Text="颜色" />
+            <Button Grid.Column="1" Classes="Basic" Content="恢复默认" Command="{Binding ResetTaskbarLyricsAppearanceCommand}" IsEnabled="{Binding EnableTaskbarLyrics}" />
+        </Grid>
+        <localControls:SettingsCard IsEnabled="{Binding EnableTaskbarLyrics}">
+            <localControls:SettingsRow ColumnDefinitions="*,Auto,140,Auto" ColumnSpacing="10">
                 <StackPanel>
-                    <TextBlock Text="未播放颜色" FontWeight="Normal" TextWrapping="Wrap"/>
-                    <TextBlock Text="同时用于翻译。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="RowTitle" Text="未播放颜色" />
+                    <TextBlock Classes="RowHint" Text="同时用于翻译。" />
+                    <TextBlock Classes="RowHint" Text="{Binding TaskbarUnplayedColorError}" IsVisible="{Binding HasTaskbarUnplayedColorError}" Foreground="{DynamicResource SukiDangerColor}" />
                 </StackPanel>
-                <Border Grid.Column="1" Width="28" Height="28" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource SukiBorder}" Background="{Binding TaskbarUnplayedColorPreviewBrush}"/>
-                <TextBox Grid.Column="2" PlaceholderText="#FF2E2E2E" Text="{Binding TaskbarUnplayedColorHexInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                <Button Grid.Column="3" MinWidth="64" Content="应用" Command="{Binding ApplyTaskbarUnplayedColorHexCommand}"/>
+                <Border Grid.Column="1" Classes="Swatch" CornerRadius="6" Background="{Binding TaskbarUnplayedColorPreviewBrush}" />
+                <TextBox Grid.Column="2" PlaceholderText="#FF2E2E2E" Text="{Binding TaskbarUnplayedColorHexInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Grid.Column="3" Classes="Basic" MinWidth="64" Content="应用" Command="{Binding ApplyTaskbarUnplayedColorHexCommand}" />
             </localControls:SettingsRow>
-        </Border>
-        <TextBlock Text="{Binding TaskbarUnplayedColorError}" IsVisible="{Binding HasTaskbarUnplayedColorError}" Foreground="{DynamicResource SukiRed}" FontSize="12" TextWrapping="Wrap"/>
-        <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
-            <localControls:SettingsRow ColumnDefinitions="*,Auto,150,Auto" ColumnSpacing="8" Margin="0,6" IsEnabled="{Binding EnableTaskbarLyrics}">
-                <TextBlock Text="已播放颜色" FontWeight="Normal" TextWrapping="Wrap"/>
-                <Border Grid.Column="1" Width="28" Height="28" CornerRadius="4" BorderThickness="1" BorderBrush="{DynamicResource SukiBorder}" Background="{Binding TaskbarPlayedColorPreviewBrush}"/>
-                <TextBox Grid.Column="2" PlaceholderText="#FF268EEB" Text="{Binding TaskbarPlayedColorHexInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                <Button Grid.Column="3" MinWidth="64" Content="应用" Command="{Binding ApplyTaskbarPlayedColorHexCommand}"/>
+            <localControls:SettingsRow ColumnDefinitions="*,Auto,140,Auto" ColumnSpacing="10">
+                <StackPanel>
+                    <TextBlock Classes="RowTitle" Text="已播放颜色" />
+                    <TextBlock Classes="RowHint" Text="{Binding TaskbarPlayedColorError}" IsVisible="{Binding HasTaskbarPlayedColorError}" Foreground="{DynamicResource SukiDangerColor}" />
+                </StackPanel>
+                <Border Grid.Column="1" Classes="Swatch" CornerRadius="6" Background="{Binding TaskbarPlayedColorPreviewBrush}" />
+                <TextBox Grid.Column="2" PlaceholderText="#FF268EEB" Text="{Binding TaskbarPlayedColorHexInput, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                <Button Grid.Column="3" Classes="Basic" MinWidth="64" Content="应用" Command="{Binding ApplyTaskbarPlayedColorHexCommand}" />
             </localControls:SettingsRow>
-        </Border>
-        <TextBlock Text="{Binding TaskbarPlayedColorError}" IsVisible="{Binding HasTaskbarPlayedColorError}" Foreground="{DynamicResource SukiRed}" FontSize="12" TextWrapping="Wrap"/>
-        <Button Classes="Basic" Content="恢复默认" HorizontalAlignment="Left" Command="{Binding ResetTaskbarLyricsAppearanceCommand}"/>
+        </localControls:SettingsCard>
     </StackPanel>
 </UserControl>
