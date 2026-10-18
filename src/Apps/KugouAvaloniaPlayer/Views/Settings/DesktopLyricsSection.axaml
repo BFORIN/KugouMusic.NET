@@ -1,5 +1,23 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:suki="https://github.com/kikipoulet/SukiUI" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" xmlns:models="clr-namespace:KugouAvaloniaPlayer.Models" xmlns:simpleAudio="clr-namespace:SimpleAudio;assembly=SimpleAudio" xmlns:asyncImageLoader="clr-namespace:AsyncImageLoader;assembly=AsyncImageLoader.Avalonia" xmlns:behaviors="using:KugouAvaloniaPlayer.Behaviors" x:Class="KugouAvaloniaPlayer.Views.Settings.DesktopLyricsSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
     <StackPanel Spacing="16">
+        <Border IsVisible="{Binding IsNativeDesktopLyricOptionsVisible}" BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
+            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6">
+                <StackPanel>
+                    <TextBlock Text="使用原生桌面歌词" FontWeight="Normal" TextWrapping="Wrap"/>
+                    <TextBlock Text="适用于支持的 Wayland 桌面；不支持时自动使用默认窗口。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding EnableNativeDesktopLyrics, Mode=TwoWay}"/>
+            </localControls:SettingsRow>
+        </Border>
+        <Border IsVisible="{Binding IsWaylandDesktopLyricOptionsVisible}" BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
+            <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6">
+                <StackPanel>
+                    <TextBlock Text="全屏应用上显示歌词" FontWeight="Normal" TextWrapping="Wrap"/>
+                    <TextBlock Text="使用原生 Wayland 桌面歌词时生效。" FontSize="12" Foreground="{DynamicResource SukiLowText}" TextWrapping="Wrap"/>
+                </StackPanel>
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding WaylandDesktopLyricOverFullscreen, Mode=TwoWay}"/>
+            </localControls:SettingsRow>
+        </Border>
         <Border BorderBrush="{DynamicResource SukiBorder}" BorderThickness="0,0,0,1" Padding="0,0,0,8">
             <localControls:SettingsRow ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,6">
                 <TextBlock Text="桌面歌词锁定" FontWeight="Normal" TextWrapping="Wrap"/>

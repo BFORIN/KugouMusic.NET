@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using KuGou.Net.Abstractions;
+using KugouAvaloniaPlayer.Services.DesktopLyric;
 
 namespace KugouAvaloniaPlayer.Models;
 
@@ -235,6 +236,10 @@ public class AppSettings
     public bool DesktopLyricDoubleLineEnabled { get; set; }
     public bool DesktopLyricControlsBelow { get; set; }
     public bool DesktopLyricLocked { get; set; }
+    public bool EnableNativeDesktopLyrics { get; set; }
+    public bool WaylandDesktopLyricOverFullscreen { get; set; }
+    public WaylandLyricPlacement WaylandDesktopLyricPosition { get; set; } = new();
+    public WaylandLyricPlacement WaylandVerticalDesktopLyricPosition { get; set; } = new();
     public bool OpenDesktopLyricOnStartup { get; set; }
     public DesktopLyricWindowPositionSettings DesktopLyricWindowPosition { get; set; } = new();
     public DesktopLyricWindowPositionSettings VerticalDesktopLyricWindowPosition { get; set; } = new();

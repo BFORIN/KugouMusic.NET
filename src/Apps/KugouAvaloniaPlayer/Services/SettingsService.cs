@@ -129,6 +129,8 @@ public static class SettingsManager
         Settings.MainWindowState ??= new MainWindowStateSettings();
         Settings.DesktopLyricWindowPosition ??= new DesktopLyricWindowPositionSettings();
         Settings.VerticalDesktopLyricWindowPosition ??= new DesktopLyricWindowPositionSettings();
+        Settings.WaylandDesktopLyricPosition ??= new();
+        Settings.WaylandVerticalDesktopLyricPosition ??= new();
         Settings.AppTheme = NormalizeAppTheme(Settings.AppTheme);
         if (!Enum.IsDefined(Settings.MainWindowState.State))
             Settings.MainWindowState.State = SavedMainWindowState.Normal;

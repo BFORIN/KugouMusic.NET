@@ -91,6 +91,16 @@ public partial class SettingViewModel : PageViewModelBase
     [ObservableProperty] public partial string DesktopSelectedLyricFontMode { get; set; } = LyricColorModeDefault;
 
     [ObservableProperty] public partial bool DesktopLyricDoubleLineEnabled { get; set; }
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsWaylandDesktopLyricOptionsVisible))]
+    public partial bool EnableNativeDesktopLyrics { get; set; }
+    [ObservableProperty] public partial bool WaylandDesktopLyricOverFullscreen { get; set; }
+
+    public bool IsNativeDesktopLyricOptionsVisible => OperatingSystem.IsLinux();
+
+    public bool IsWaylandDesktopLyricOptionsVisible => OperatingSystem.IsLinux()
+        && EnableNativeDesktopLyrics
+        && !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("WAYLAND_DISPLAY"));
 
     [ObservableProperty] public partial string DesktopSelectedLyricAlignment { get; set; } = LyricAlignmentCenter;
 
@@ -232,6 +242,8 @@ public partial class SettingViewModel : PageViewModelBase
             UseLightweightNowPlayingLyricScroll = SettingsManager.Settings.UseLightweightNowPlayingLyricScroll;
             RefreshOutputDeviceOptions(SettingsManager.Settings.AudioOutputDeviceId);
             DesktopLyricDoubleLineEnabled = SettingsManager.Settings.DesktopLyricDoubleLineEnabled;
+            EnableNativeDesktopLyrics = SettingsManager.Settings.EnableNativeDesktopLyrics;
+            WaylandDesktopLyricOverFullscreen = SettingsManager.Settings.WaylandDesktopLyricOverFullscreen;
             DesktopSelectedLyricAlignment = FormatAlignment(SettingsManager.Settings.DesktopLyricAlignment);
             DesktopSelectedLyricLayout =
                 SettingsManager.Settings.DesktopLyricLayoutMode == DesktopLyricLayoutMode.Vertical
@@ -753,6 +765,21 @@ public partial class SettingViewModel : PageViewModelBase
         NotifyUiPreferencesChanged();
     }
 
+    partial void OnWaylandDesktopLyricOverFullscreenChanged(bool value)
+    {
+        if (_isApplyingSettingsSnapshot) return;
+        SettingsManager.Settings.WaylandDesktopLyricOverFullscreen = value;
+        SettingsManager.Save();
+    }
+
+    partial void OnEnableNativeDesktopLyricsChanged(bool value)
+    {
+        if (_isApplyingSettingsSnapshot) return;
+        SettingsManager.Settings.EnableNativeDesktopLyrics = value;
+        SettingsManager.Save();
+        _desktopLyricWindowService.RefreshBackend();
+    }
+
     partial void OnEnableTaskbarLyricsChanged(bool value)
     {
         if (_isApplyingSettingsSnapshot) return;
@@ -1121,6 +1148,8 @@ public partial class SettingViewModel : PageViewModelBase
             UseLightweightNowPlayingLyricScroll = SettingsManager.Settings.UseLightweightNowPlayingLyricScroll;
             RefreshOutputDeviceOptions(SettingsManager.Settings.AudioOutputDeviceId);
             DesktopLyricDoubleLineEnabled = SettingsManager.Settings.DesktopLyricDoubleLineEnabled;
+            EnableNativeDesktopLyrics = SettingsManager.Settings.EnableNativeDesktopLyrics;
+            WaylandDesktopLyricOverFullscreen = SettingsManager.Settings.WaylandDesktopLyricOverFullscreen;
             DesktopSelectedLyricAlignment = FormatAlignment(SettingsManager.Settings.DesktopLyricAlignment);
             DesktopSelectedLyricLayout = SettingsManager.Settings.DesktopLyricLayoutMode == DesktopLyricLayoutMode.Vertical
                 ? DesktopLyricLayoutVertical : DesktopLyricLayoutHorizontal;

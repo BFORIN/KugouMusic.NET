@@ -1,5 +1,7 @@
 using System;
 using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
 using ZLinq;
 using Avalonia;
 using Avalonia.Controls;
@@ -26,6 +28,7 @@ public interface IDesktopLyricWindowService
     void Toggle();
     void Close();
     void Unlock();
+    void RefreshBackend();
 }
 
 public interface IMainWindowService
@@ -91,8 +94,16 @@ public sealed class DesktopLyricWindowService(
     private DesktopLyricLockOverlayWindow? _lockOverlayWindow;
     private bool _isSynchronizingWindowPositions;
     private DesktopLyricLayoutMode _activeLayoutMode;
+#if KUGOU_LINUX
+    private WaylandDesktopLyricSession? _waylandSession;
+    private CancellationTokenSource? _waylandStartup;
+#endif
 
-    public bool IsOpen => _lyricWindow != null;
+    public bool IsOpen => _lyricWindow != null
+#if KUGOU_LINUX
+        || _waylandSession != null
+#endif
+        ;
     public event Action<bool>? IsOpenChanged;
 
     public void Toggle()
@@ -109,6 +120,9 @@ public sealed class DesktopLyricWindowService(
     {
         uiDispatcher.RunOrPost(() =>
         {
+#if KUGOU_LINUX
+            _waylandSession?.Unlock();
+#endif
             if (_lyricWindow?.DataContext is DesktopLyricViewModel lyricViewModel)
                 lyricViewModel.Unlock();
 
@@ -122,13 +136,82 @@ public sealed class DesktopLyricWindowService(
 
     private void ToggleCore()
     {
-        if (_lyricWindow == null)
+#if KUGOU_LINUX
+        if (_waylandStartup != null)
+        {
+            CloseCore();
+            return;
+        }
+#endif
+        if (!IsOpen)
             ShowCore();
         else
             CloseCore();
     }
 
+    public void RefreshBackend()
+    {
+#if KUGOU_LINUX
+        uiDispatcher.RunOrPost(() =>
+        {
+            if (!IsOpen && _waylandStartup == null) return;
+            CloseCore();
+            ShowCore();
+        });
+#endif
+    }
+
     private void ShowCore()
+    {
+#if KUGOU_LINUX
+        if (WaylandDesktopLyricSession.CanTryStart)
+        {
+            _ = ShowWaylandOrAvaloniaAsync();
+            return;
+        }
+#endif
+        ShowAvaloniaCore();
+    }
+
+#if KUGOU_LINUX
+    private async Task ShowWaylandOrAvaloniaAsync()
+    {
+        using var startup = new CancellationTokenSource();
+        _waylandStartup = startup;
+        var viewModel = desktopLyricViewModelFactory.Create(canMousePassthrough: true);
+        try
+        {
+            var session = await WaylandDesktopLyricSession.TryStartAsync(viewModel, uiDispatcher, startup.Token);
+            if (startup.IsCancellationRequested)
+            {
+                session?.Dispose();
+                if (session == null) viewModel.Dispose();
+                return;
+            }
+            if (session == null)
+            {
+                viewModel.Dispose();
+                ShowAvaloniaCore();
+                return;
+            }
+            _waylandSession = session;
+            session.Closed += () =>
+            {
+                if (!ReferenceEquals(_waylandSession, session)) return;
+                _waylandSession = null;
+                IsOpenChanged?.Invoke(false);
+            };
+            session.StartListening();
+            IsOpenChanged?.Invoke(true);
+        }
+        finally
+        {
+            if (ReferenceEquals(_waylandStartup, startup)) _waylandStartup = null;
+        }
+    }
+#endif
+
+    private void ShowAvaloniaCore()
     {
         var lyricViewModel = desktopLyricViewModelFactory.Create();
         var lyricWindow = new DesktopLyricWindow
@@ -218,6 +301,16 @@ public sealed class DesktopLyricWindowService(
 
     private void CloseCore()
     {
+#if KUGOU_LINUX
+        _waylandStartup?.Cancel();
+        _waylandStartup = null;
+        if (_waylandSession != null)
+        {
+            _waylandSession.Dispose();
+            _waylandSession = null;
+            IsOpenChanged?.Invoke(false);
+        }
+#endif
         if (_lyricWindow == null) return;
 
         desktopLyricMousePassthroughService.Apply(_lyricWindow, DesktopLyricHitTestLayout.FullWindow);

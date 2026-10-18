@@ -63,7 +63,7 @@ public sealed class DiscoverTagViewModelFactory(
 
 public interface IDesktopLyricViewModelFactory
 {
-    DesktopLyricViewModel Create();
+    DesktopLyricViewModel Create(bool? canMousePassthrough = null);
 }
 
 public sealed class DesktopLyricViewModelFactory(
@@ -72,12 +72,12 @@ public sealed class DesktopLyricViewModelFactory(
     IDesktopLyricMousePassthroughService desktopLyricMousePassthroughService)
     : IDesktopLyricViewModelFactory
 {
-    public DesktopLyricViewModel Create()
+    public DesktopLyricViewModel Create(bool? canMousePassthrough = null)
     {
         return new DesktopLyricViewModel(
             playerViewModel,
             uiPreferencesState,
-            desktopLyricMousePassthroughService.IsSupported,
+            canMousePassthrough ?? desktopLyricMousePassthroughService.IsSupported,
             usesSeparateLockOverlay: !desktopLyricMousePassthroughService.SupportsSelectiveHitTesting);
     }
 }

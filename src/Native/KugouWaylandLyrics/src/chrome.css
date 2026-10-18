@@ -1,0 +1,59 @@
+window.kugou-wayland-lyrics {
+    background: transparent;
+    box-shadow: none;
+}
+
+.lyrics-glass {
+    background: linear-gradient(145deg, rgba(66, 72, 86, 0.60), rgba(26, 29, 38, 0.52));
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    border-radius: 18px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.08);
+    transition: opacity 180ms ease;
+}
+.lyrics-glass.locked { opacity: 0; }
+
+.lyrics-toolbar {
+    padding: 7px;
+    background: linear-gradient(145deg, rgba(74, 81, 96, 0.65), rgba(35, 39, 50, 0.65));
+    border: 1px solid rgba(255, 255, 255, 0.17);
+    border-radius: 16px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.14), inset 0 1px rgba(255, 255, 255, 0.06);
+}
+.lyrics-toolbar button {
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.90);
+    background: transparent;
+    border: none;
+    border-radius: 10px;
+    box-shadow: none;
+    text-shadow: none;
+    font-size: 13px;
+    transition: background 160ms ease, color 160ms ease;
+}
+.lyrics-toolbar button:hover { background: rgba(255, 255, 255, 0.13); color: white; }
+.lyrics-toolbar button:active { background: rgba(120, 182, 255, 0.25); }
+.lyrics-toolbar button.play { background: rgba(125, 187, 255, 0.15); color: #d8ebff; }
+.lyrics-toolbar button.play:hover { background: rgba(125, 187, 255, 0.28); }
+.lyrics-toolbar button.close:hover { background: rgba(248, 113, 113, 0.22); color: #fecaca; }
+
+button.lyrics-unlock {
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.85);
+    background: rgba(42, 47, 59, 0.54);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+    opacity: 0.30;
+    transition: opacity 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+button.lyrics-unlock:hover {
+    opacity: 1;
+    color: white;
+    background: rgba(62, 76, 100, 0.78);
+    border-color: rgba(179, 212, 255, 0.55);
+}
+button.lyrics-unlock:active { background: rgba(92, 125, 172, 0.85); }

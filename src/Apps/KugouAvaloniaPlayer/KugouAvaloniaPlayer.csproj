@@ -98,6 +98,19 @@
                  TargetPath="KugouTaskbarLyrics.exe" />
     </ItemGroup>
 
+    <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux')) And Exists('Native/kugou-wayland-lyrics')">
+        <Content Include="Native/kugou-wayland-lyrics"
+                 CopyToOutputDirectory="PreserveNewest"
+                 CopyToPublishDirectory="PreserveNewest"
+                 TargetPath="kugou-wayland-lyrics"
+                 ExcludeFromSingleFile="true" />
+        <Content Include="Native/wayland/**/*"
+                 CopyToOutputDirectory="PreserveNewest"
+                 CopyToPublishDirectory="PreserveNewest"
+                 Link="wayland/%(RecursiveDir)%(Filename)%(Extension)"
+                 ExcludeFromSingleFile="true" />
+    </ItemGroup>
+
     <ItemGroup>
         <Compile Update="Views\MyPlaylistsView.axaml.cs">
             <DependentUpon>MyPlaylistsView.axaml</DependentUpon>
