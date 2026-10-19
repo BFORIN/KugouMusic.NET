@@ -101,31 +101,43 @@ public sealed class BoundedDiskCachedWebImageLoader(
         using (var stream = new MemoryStream(bytes, writable: false))
             decoded = Bitmap.DecodeToWidth(stream, decodePixelWidth, BitmapInterpolationMode.HighQuality);
 
+        List<Bitmap>? bitmapsToDispose = null;
+        Bitmap? result;
         lock (_sync)
         {
-            if (_disposed) { decoded.Dispose(); return null; }
-            if (_decodedBitmaps.TryGetValue(key, out var raced))
+            if (_disposed)
             {
-                decoded.Dispose();
+                result = null;
+                bitmapsToDispose = [decoded];
+            }
+            else if (_decodedBitmaps.TryGetValue(key, out var raced))
+            {
                 raced.RefCount++;
                 _decodedBitmapLru.Remove(raced.Node);
                 _decodedBitmapLru.AddFirst(raced.Node);
-                return raced.Bitmap;
+                result = raced.Bitmap;
+                bitmapsToDispose = [decoded];
             }
-
-            var size = (long)decoded.PixelSize.Width * decoded.PixelSize.Height * 4;
-            var node = new LinkedListNode<string>(key);
-            var entry = new DecodedBitmapEntry(decoded, size, node) { RefCount = 1 };
-            _decodedBitmaps[key] = entry;
-            _decodedBitmapLru.AddFirst(node);
-            _decodedBitmapBytes += size;
-            TrimDecodedBitmapCache();
-            return decoded;
+            else
+            {
+                var size = (long)decoded.PixelSize.Width * decoded.PixelSize.Height * 4;
+                var node = new LinkedListNode<string>(key);
+                var entry = new DecodedBitmapEntry(decoded, size, node) { RefCount = 1 };
+                _decodedBitmaps[key] = entry;
+                _decodedBitmapLru.AddFirst(node);
+                _decodedBitmapBytes += size;
+                bitmapsToDispose = TrimDecodedBitmapCache();
+                result = decoded;
+            }
         }
+
+        DisposeBitmapsInBackground(bitmapsToDispose);
+        return result;
     }
 
     public void ReleasePortraitBitmap(Bitmap bitmap)
     {
+        List<Bitmap>? bitmapsToDispose = null;
         lock (_sync)
         {
             foreach (var entry in _decodedBitmaps.Values)
@@ -133,15 +145,18 @@ public sealed class BoundedDiskCachedWebImageLoader(
                 if (ReferenceEquals(entry.Bitmap, bitmap))
                 {
                     entry.RefCount = Math.Max(0, entry.RefCount - 1);
-                    TrimDecodedBitmapCache();
-                    return;
+                    bitmapsToDispose = TrimDecodedBitmapCache();
+                    break;
                 }
             }
         }
+
+        DisposeBitmapsInBackground(bitmapsToDispose);
     }
 
-    private void TrimDecodedBitmapCache()
+    private List<Bitmap>? TrimDecodedBitmapCache()
     {
+        List<Bitmap>? bitmapsToDispose = null;
         var node = _decodedBitmapLru.Last;
         while (_decodedBitmapBytes > DefaultDecodedBitmapCacheBytes && node != null)
         {
@@ -152,10 +167,26 @@ public sealed class BoundedDiskCachedWebImageLoader(
                 _decodedBitmaps.Remove(node.Value);
                 _decodedBitmapLru.Remove(node);
                 _decodedBitmapBytes -= entry.Size;
-                entry.Bitmap.Dispose();
+                (bitmapsToDispose ??= []).Add(entry.Bitmap);
             }
             node = previous;
         }
+
+        return bitmapsToDispose;
+    }
+
+    private static void DisposeBitmapsInBackground(List<Bitmap>? bitmaps)
+    {
+        if (bitmaps is not { Count: > 0 }) return;
+
+        _ = Task.Run(() =>
+        {
+            foreach (var bitmap in bitmaps)
+            {
+                try { bitmap.Dispose(); }
+                catch { /* Bitmap disposal is best effort during cache eviction. */ }
+            }
+        });
     }
 
     private async Task<Bitmap?> ProvideImageWithDecodeWidthAsync(string url, int? decodePixelWidth)
@@ -624,11 +655,13 @@ public sealed class BoundedDiskCachedWebImageLoader(
             Volatile.Write(ref _diskMaintenanceStopped, 1);
             _diskMaintenanceCancellation.Cancel();
 
+            List<Bitmap> bitmapsToDispose;
             lock (_sync)
             {
                 _disposed = true;
                 _memoryCache.Clear();
-                foreach (var entry in _decodedBitmaps.Values) entry.Bitmap.Dispose();
+                bitmapsToDispose = new List<Bitmap>(_decodedBitmaps.Count);
+                foreach (var entry in _decodedBitmaps.Values) bitmapsToDispose.Add(entry.Bitmap);
                 _decodedBitmaps.Clear();
                 _decodedBitmapLru.Clear();
                 _decodedBitmapBytes = 0;
@@ -636,6 +669,8 @@ public sealed class BoundedDiskCachedWebImageLoader(
                 _leastRecentlyUsed.Clear();
                 _memoryBytes = 0;
             }
+
+            DisposeBitmapsInBackground(bitmapsToDispose);
         }
 
         base.Dispose(disposing);
