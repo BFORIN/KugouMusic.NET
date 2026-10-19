@@ -97,9 +97,14 @@ public sealed class BoundedDiskCachedWebImageLoader(
 
         var bytes = await GetExternalImageBytesAsync(url).ConfigureAwait(false);
         if (bytes is not { Length: > 0 }) return null;
-        Bitmap decoded;
-        using (var stream = new MemoryStream(bytes, writable: false))
-            decoded = Bitmap.DecodeToWidth(stream, decodePixelWidth, BitmapInterpolationMode.HighQuality);
+        // GetExternalImageBytesAsync may return synchronously when the encoded bytes
+        // are already cached. Keep high quality decoding off the UI thread in both
+        // the cache-hit and network paths.
+        var decoded = await Task.Run(() =>
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            return Bitmap.DecodeToWidth(stream, decodePixelWidth, BitmapInterpolationMode.HighQuality);
+        }).ConfigureAwait(false);
 
         List<Bitmap>? bitmapsToDispose = null;
         Bitmap? result;
