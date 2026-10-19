@@ -26,6 +26,8 @@ public sealed class BoundedDiskCachedWebImageLoader(
 {
     private const int DefaultMaxMemoryEntries = 200;
     private const long DefaultMaxMemoryBytes = 32L * 1024 * 1024;
+    private const long DefaultDecodedBitmapCacheBytes = 32L * 1024 * 1024;
+    private const int MaxPortraitDecodeWidth = 1920;
     private const long DefaultMaxDiskBytes = 256L * 1024 * 1024;
     private const int EmbeddedCoverDecodeWidth = 128;
     private const int DiskMaintenanceWriteThreshold = 64;
@@ -42,11 +44,14 @@ public sealed class BoundedDiskCachedWebImageLoader(
     private readonly Dictionary<string, WeakReference<Bitmap>> _embeddedBitmapCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Task<Bitmap?>> _pendingEmbeddedLoads = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Task<byte[]?>> _pendingLoads = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DecodedBitmapEntry> _decodedBitmaps = new(StringComparer.Ordinal);
+    private readonly LinkedList<string> _decodedBitmapLru = new();
     private readonly LinkedList<string> _leastRecentlyUsed = new();
     private readonly CancellationTokenSource _diskMaintenanceCancellation = new();
 
     private bool _disposed;
     private long _memoryBytes;
+    private long _decodedBitmapBytes;
     private int _diskWritesSinceMaintenance;
     private long _diskBytesWrittenSinceMaintenance;
     private long _lastDiskMaintenanceTick;
@@ -72,6 +77,85 @@ public sealed class BoundedDiskCachedWebImageLoader(
     public async Task<Bitmap?> ProvideImageAsync(string url, int? decodePixelWidth)
     {
         return await ProvideImageWithDecodeWidthAsync(url, decodePixelWidth).ConfigureAwait(false);
+    }
+
+    /// <summary>Returns a shared cached portrait bitmap. Callers must release it with ReleasePortraitBitmap.</summary>
+    public async Task<Bitmap?> ProvidePortraitImageAsync(string url, int decodePixelWidth)
+    {
+        decodePixelWidth = Math.Clamp(decodePixelWidth, 1, MaxPortraitDecodeWidth);
+        var key = $"{url}\n{decodePixelWidth}";
+        lock (_sync)
+        {
+            if (_decodedBitmaps.TryGetValue(key, out var cached))
+            {
+                _decodedBitmapLru.Remove(cached.Node);
+                _decodedBitmapLru.AddFirst(cached.Node);
+                cached.RefCount++;
+                return cached.Bitmap;
+            }
+        }
+
+        var bytes = await GetExternalImageBytesAsync(url).ConfigureAwait(false);
+        if (bytes is not { Length: > 0 }) return null;
+        Bitmap decoded;
+        using (var stream = new MemoryStream(bytes, writable: false))
+            decoded = Bitmap.DecodeToWidth(stream, decodePixelWidth, BitmapInterpolationMode.HighQuality);
+
+        lock (_sync)
+        {
+            if (_disposed) { decoded.Dispose(); return null; }
+            if (_decodedBitmaps.TryGetValue(key, out var raced))
+            {
+                decoded.Dispose();
+                raced.RefCount++;
+                _decodedBitmapLru.Remove(raced.Node);
+                _decodedBitmapLru.AddFirst(raced.Node);
+                return raced.Bitmap;
+            }
+
+            var size = (long)decoded.PixelSize.Width * decoded.PixelSize.Height * 4;
+            var node = new LinkedListNode<string>(key);
+            var entry = new DecodedBitmapEntry(decoded, size, node) { RefCount = 1 };
+            _decodedBitmaps[key] = entry;
+            _decodedBitmapLru.AddFirst(node);
+            _decodedBitmapBytes += size;
+            TrimDecodedBitmapCache();
+            return decoded;
+        }
+    }
+
+    public void ReleasePortraitBitmap(Bitmap bitmap)
+    {
+        lock (_sync)
+        {
+            foreach (var entry in _decodedBitmaps.Values)
+            {
+                if (ReferenceEquals(entry.Bitmap, bitmap))
+                {
+                    entry.RefCount = Math.Max(0, entry.RefCount - 1);
+                    TrimDecodedBitmapCache();
+                    return;
+                }
+            }
+        }
+    }
+
+    private void TrimDecodedBitmapCache()
+    {
+        var node = _decodedBitmapLru.Last;
+        while (_decodedBitmapBytes > DefaultDecodedBitmapCacheBytes && node != null)
+        {
+            var previous = node.Previous;
+            var entry = _decodedBitmaps[node.Value];
+            if (entry.RefCount == 0)
+            {
+                _decodedBitmaps.Remove(node.Value);
+                _decodedBitmapLru.Remove(node);
+                _decodedBitmapBytes -= entry.Size;
+                entry.Bitmap.Dispose();
+            }
+            node = previous;
+        }
     }
 
     private async Task<Bitmap?> ProvideImageWithDecodeWidthAsync(string url, int? decodePixelWidth)
@@ -544,6 +628,10 @@ public sealed class BoundedDiskCachedWebImageLoader(
             {
                 _disposed = true;
                 _memoryCache.Clear();
+                foreach (var entry in _decodedBitmaps.Values) entry.Bitmap.Dispose();
+                _decodedBitmaps.Clear();
+                _decodedBitmapLru.Clear();
+                _decodedBitmapBytes = 0;
                 _pendingLoads.Clear();
                 _leastRecentlyUsed.Clear();
                 _memoryBytes = 0;
@@ -554,6 +642,14 @@ public sealed class BoundedDiskCachedWebImageLoader(
     }
 
     private sealed record CacheEntry(byte[] Bytes, long Size, LinkedListNode<string> Node);
+
+    private sealed class DecodedBitmapEntry(Bitmap bitmap, long size, LinkedListNode<string> node)
+    {
+        public Bitmap Bitmap { get; } = bitmap;
+        public long Size { get; } = size;
+        public LinkedListNode<string> Node { get; } = node;
+        public int RefCount { get; set; }
+    }
 
     private readonly record struct DiskCacheFile(string FileName, long Length, DateTime LastWriteTimeUtc);
 }
