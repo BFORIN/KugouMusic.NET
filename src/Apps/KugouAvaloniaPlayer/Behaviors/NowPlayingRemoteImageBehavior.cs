@@ -82,6 +82,7 @@ public static class NowPlayingRemoteImageBehavior
         private Bitmap? _ownedBitmap;
         private bool _ownedBitmapIsPortraitCached;
         private int _loadVersion;
+        private int _lastRequestedDecodeWidth;
         private bool _isAttached;
 
         public ImageState(Image image)
@@ -110,22 +111,33 @@ public static class NowPlayingRemoteImageBehavior
                 return;
 
             var usePortraitPipeline = GetUsePortraitPipeline(_image);
-            _ = LoadAndApplyAsync(source, ResolveDecodeWidth(), usePortraitPipeline, _loadVersion);
+            var decodeWidth = ResolveDecodeWidth();
+            _lastRequestedDecodeWidth = decodeWidth;
+            _ = LoadAndApplyAsync(source, decodeWidth, usePortraitPipeline, _loadVersion);
         }
 
         private int ResolveDecodeWidth()
         {
             var width = GetDecodePixelWidth(_image);
             if (!GetUsePortraitPipeline(_image)) return width;
-            var displaySize = Math.Max(_image.Bounds.Width, _image.Bounds.Height);
-            var scaling = TopLevel.GetTopLevel(_image)?.RenderScaling ?? 1;
+            var topLevel = TopLevel.GetTopLevel(_image);
+            var displaySize = Math.Max(topLevel?.ClientSize.Width ?? 0, topLevel?.ClientSize.Height ?? 0);
+            if (displaySize <= 0)
+                displaySize = Math.Max(_image.Bounds.Width, _image.Bounds.Height);
+            var scaling = topLevel?.RenderScaling ?? 1;
             return Math.Clamp((int)Math.Ceiling(displaySize * scaling * 1.15), 640, 1920);
         }
 
         private void OnSizeChanged(object? sender, SizeChangedEventArgs args)
         {
-            if (GetUsePortraitPipeline(_image) && _isAttached &&
-                Math.Abs(args.NewSize.Width - args.PreviousSize.Width) > 160)
+            if (!GetUsePortraitPipeline(_image) || !_isAttached)
+                return;
+
+            // Image bounds can change when Source is cleared or assigned. Only reload
+            // when the window's target decode size actually changed, avoiding a
+            // Source -> layout -> SizeChanged -> reload feedback loop.
+            var decodeWidth = ResolveDecodeWidth();
+            if (Math.Abs(decodeWidth - _lastRequestedDecodeWidth) > 160)
                 Reload();
         }
 
