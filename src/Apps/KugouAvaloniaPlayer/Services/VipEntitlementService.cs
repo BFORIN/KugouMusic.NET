@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using KuGou.Net.Clients;
+using KuGou.Net.Abstractions.Models;
 using Microsoft.Extensions.Logging;
 using ZLinq;
 
@@ -21,7 +22,21 @@ internal sealed class VipEntitlementService(
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var history = await userClient.GetVipRecordAsync();
+        VipReceiveHistoryResponse? history;
+        try
+        {
+            history = await userClient.GetVipRecordAsync();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            logger.LogWarning(ex, "查询 VIP 领取记录异常");
+            return VipEntitlementResult.Failed(VipEntitlementFailureReason.HistoryUnavailable, null);
+        }
         cancellationToken.ThrowIfCancellationRequested();
         if (history is not { Status: 1 })
         {

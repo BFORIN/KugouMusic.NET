@@ -41,6 +41,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMainWindowService _mainWindowService;
     private readonly IMessenger _messenger;
     private readonly INavigationService _navigationService;
+    private readonly INetworkConnectivityService _networkConnectivityService;
     private readonly IUiPreferencesState _uiPreferencesState;
     private readonly IVipEntitlementService _vipEntitlementService;
     private readonly SearchViewModel _searchViewModel;
@@ -104,6 +105,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IMessenger messenger,
         IUiPreferencesState uiPreferencesState,
         IVipEntitlementService vipEntitlementService,
+        INetworkConnectivityService networkConnectivityService,
         INavigationService navigationService,
         NowPlayingViewModel nowPlaying,
         LoginViewModel loginViewModel,
@@ -128,6 +130,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _messenger = messenger;
         _uiPreferencesState = uiPreferencesState;
         _vipEntitlementService = vipEntitlementService;
+        _networkConnectivityService = networkConnectivityService;
         _navigationService = navigationService;
 
         LoginViewModel = loginViewModel;
@@ -487,8 +490,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
+            var token = _sessionManager.Session.Token;
             var vipResult = await _vipEntitlementService.TryEnsureDailyVipAsync();
-            await ShowVipInitializationFailureAsync(vipResult);
+            await ShowVipInitializationFailureAsync(vipResult, token);
 
             await Player.LoadLikeListAsync();
         }
@@ -498,12 +502,35 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task ShowVipInitializationFailureAsync(VipEntitlementResult result)
+    private async Task ShowVipInitializationFailureAsync(VipEntitlementResult result, string? token)
     {
+        if (result.FailureReason == VipEntitlementFailureReason.HistoryUnavailable)
+        {
+            var networkAvailable = await _networkConnectivityService.IsInternetAvailableAsync();
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                // Ignore a startup result belonging to a session that has since changed.
+                if (_isDisposed || !IsLoggedIn || _sessionManager.Session.Token != token)
+                    return;
+
+                if (networkAvailable)
+                {
+                    _loginDialogService.ShowSessionExpiredDialog();
+                    return;
+                }
+
+                ToastManager.CreateToast()
+                    .OfType(NotificationType.Warning)
+                    .WithTitle("网络异常")
+                    .WithContent("无法连接网络，请检查网络连接后重试。")
+                    .Dismiss().After(TimeSpan.FromSeconds(3))
+                    .Queue();
+            });
+            return;
+        }
+
         var toastContent = result.FailureReason switch
         {
-            VipEntitlementFailureReason.HistoryUnavailable =>
-                ("查询VIP失败", "请重新登录或检查网络连接"),
             VipEntitlementFailureReason.ReceiveFailed =>
                 ("领取VIP失败", "请重新登录或在手机上手动领取"),
             _ => default

@@ -58,6 +58,7 @@ public sealed partial class AvaloniaAppServiceProvider
         .Bind<IExternalPlaylistImportService>().As(Singleton).To<ExternalPlaylistImportService>()
         .Bind<ILoginInitializationService>().As(Singleton).To<LoginInitializationService>()
         .Bind<IVipEntitlementService>().As(Singleton).To<VipEntitlementService>()
+        .Bind<INetworkConnectivityService>().As(Singleton).To<NetworkConnectivityService>()
         .Bind<ILoginDialogService>().As(Singleton).To<LoginDialogService>()
         .Bind<INavigationService>().As(Singleton).To<NavigationService>()
         .Bind<IMainWindowService>().As(Singleton).To<MainWindowService>()

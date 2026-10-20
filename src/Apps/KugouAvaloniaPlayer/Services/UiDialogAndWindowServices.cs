@@ -7,6 +7,10 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Platform;
+using Avalonia.Controls.Notifications;
+using CommunityToolkit.Mvvm.Messaging;
+using KuGou.Net.Clients;
+using KuGou.Net.Protocol.Session;
 using KugouAvaloniaPlayer.Controls;
 using KugouAvaloniaPlayer.Models;
 using KugouAvaloniaPlayer.Services.DesktopLyric;
@@ -19,6 +23,7 @@ namespace KugouAvaloniaPlayer.Services;
 public interface ILoginDialogService
 {
     void ShowLoginDialog(LoginViewModel loginViewModel);
+    void ShowSessionExpiredDialog();
 }
 
 public interface IDesktopLyricWindowService
@@ -60,8 +65,40 @@ internal static class MainWindowPresentationHelper
     }
 }
 
-public sealed class LoginDialogService(ISukiDialogManager dialogManager, IUiDispatcherService uiDispatcher) : ILoginDialogService
+public sealed class LoginDialogService(
+    ISukiDialogManager dialogManager,
+    IUiDispatcherService uiDispatcher,
+    LoginClient loginClient,
+    KgSessionManager sessionManager,
+    IMessenger messenger) : ILoginDialogService
 {
+    public void ShowSessionExpiredDialog()
+    {
+        uiDispatcher.RunOrPost(() =>
+        {
+            var token = sessionManager.Session.Token;
+            if (string.IsNullOrEmpty(token))
+                return;
+
+            // This warning must appear even if another dialog is already open.
+            dialogManager.DismissDialog();
+            dialogManager.CreateDialog()
+                .OfType(NotificationType.Warning)
+                .WithTitle("登录失效")
+                .WithContent("登录已失效，请退出登录后重新登录。")
+                .WithActionButton("退出登录", _ =>
+                {
+                    if (sessionManager.Session.Token != token)
+                        return;
+
+                    loginClient.LogOutAsync();
+                    messenger.Send(new AuthStateChangedEvent(false));
+                }, true, "Accent")
+                .WithActionButton("取消", _ => { }, true, "Basic", "EscapeDialogCancelButton")
+                .TryShow();
+        });
+    }
+
     public void ShowLoginDialog(LoginViewModel loginViewModel)
     {
         var showAction = () =>
