@@ -306,7 +306,7 @@
                                            Foreground="{StaticResource TextPrimary}" />
 
                                 <TextBlock Text="{Binding Singer}"
-                                           FontSize="11"
+                                           FontSize="12"
                                            TextTrimming="CharacterEllipsis"
                                            Foreground="{StaticResource TextMuted}" />
 

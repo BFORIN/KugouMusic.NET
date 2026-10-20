@@ -28,13 +28,15 @@
         </Style>
     </UserControl.Styles>
     <Grid x:Name="EffectViewport" ClipToBounds="True">
-        <effects:SilkEffectControl x:Name="EffectSurface"
-                                   HorizontalAlignment="Stretch"
-                                   VerticalAlignment="Stretch"
-                                   ClipToBounds="True"
-                                   ClearColor="#00000000"
-                                   RenderMode="Continuous"
-                                   TargetFrameRate="60" />
+        <controls:NativeResolutionHost>
+            <effects:SilkEffectControl x:Name="EffectSurface"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       ClipToBounds="True"
+                                       ClearColor="#00000000"
+                                       RenderMode="Continuous"
+                                       TargetFrameRate="60" />
+        </controls:NativeResolutionHost>
 
         <Border x:Name="DiagnosticOverlayControl"
                 Margin="40"

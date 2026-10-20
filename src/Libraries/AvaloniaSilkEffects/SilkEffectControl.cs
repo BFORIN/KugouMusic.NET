@@ -34,6 +34,16 @@ public class SilkEffectControl : OpenGlControlBase
     public static readonly StyledProperty<Color> ClearColorProperty =
         AvaloniaProperty.Register<SilkEffectControl, Color>(nameof(ClearColor), Colors.Transparent);
 
+    /// <summary>
+    /// Extra content scale on top of the window's DPI scaling. A host that cancels an
+    /// ancestor's scale transform (so the GL surface keeps native resolution) sets this
+    /// to the cancelled factor; scenes then lay out against a correspondingly smaller
+    /// logical viewport and render it at full resolution.
+    /// </summary>
+    public static readonly AttachedProperty<double> ContentScaleProperty =
+        AvaloniaProperty.RegisterAttached<SilkEffectControl, Visual, double>(
+            "ContentScale", 1d, inherits: true);
+
     public static readonly DirectProperty<SilkEffectControl, string?> LastErrorProperty =
         AvaloniaProperty.RegisterDirect<SilkEffectControl, string?>(nameof(LastError), control => control.LastError);
 
@@ -85,6 +95,22 @@ public class SilkEffectControl : OpenGlControlBase
         get => GetValue(ClearColorProperty);
         set => SetValue(ClearColorProperty, value);
     }
+
+    public static double GetContentScale(Visual visual) => visual.GetValue(ContentScaleProperty);
+
+    public static void SetContentScale(Visual visual, double value) => visual.SetValue(ContentScaleProperty, value);
+
+    public double ContentScale
+    {
+        get
+        {
+            var value = GetValue(ContentScaleProperty);
+            return double.IsFinite(value) && value > 0 ? value : 1;
+        }
+    }
+
+    /// <summary>The control's size in the scene's logical units (bounds divided by <see cref="ContentScale"/>).</summary>
+    protected Size LogicalSize => Bounds.Size / ContentScale;
 
     public string? LastError
     {
@@ -142,7 +168,7 @@ public class SilkEffectControl : OpenGlControlBase
             _lastPresentationTimestamp = default;
         if (change.Property == SceneProperty || change.Property == IsPausedProperty ||
             change.Property == RenderModeProperty || change.Property == ClearColorProperty ||
-            change.Property == TargetFrameRateProperty)
+            change.Property == TargetFrameRateProperty || change.Property == ContentScaleProperty)
             RenderOnce();
     }
 
@@ -191,10 +217,12 @@ public class SilkEffectControl : OpenGlControlBase
         if (_activeScene is null)
             return;
 
-        var scaling = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
+        var dpiScaling = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
         var pixelSize = new PixelSize(
-            Math.Max(1, (int)(Bounds.Width * scaling)),
-            Math.Max(1, (int)(Bounds.Height * scaling)));
+            Math.Max(1, (int)(Bounds.Width * dpiScaling)),
+            Math.Max(1, (int)(Bounds.Height * dpiScaling)));
+        // Scenes derive their logical viewport as pixels / scaling.
+        var scaling = dpiScaling * ContentScale;
         if (pixelSize != _lastPixelSize || Math.Abs(scaling - _lastRenderScaling) > 0.001)
         {
             _lastPixelSize = pixelSize;

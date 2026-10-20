@@ -112,7 +112,7 @@
                                                    FontWeight="DemiBold"
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{Binding UserId}"
-                                                   FontSize="11"
+                                                   FontSize="12"
                                                    Foreground="{DynamicResource SukiLowText}" />
                                     </StackPanel>
                                 </Grid>

@@ -206,8 +206,16 @@
         <Style Selector="localControls|KugouWindow[WindowState=FullScreen] suki|SukiMainHost#WindowHost">
             <Setter Property="CornerRadius" Value="0" />
         </Style>
+        <!-- 弹出层继承界面缩放，与主界面保持同一尺寸。 -->
+        <Style Selector="Popup">
+            <Setter Property="InheritsTransform" Value="True" />
+        </Style>
     </localControls:KugouWindow.Styles>
 
+    <!-- 缩放挂在不裁剪的 Panel 上：Avalonia 计算有效视口时，会先按变换元素自身的 ClipToBounds
+         以未缩放的尺寸裁剪，若直接缩放 SukiMainHost，虚拟化列表会少生成行。 -->
+    <LayoutTransformControl Name="UiScaleHost">
+    <Panel>
     <suki:SukiMainHost Name="WindowHost"
                        BackgroundStyle="Bubble">
         <suki:SukiMainHost.Hosts>
@@ -454,4 +462,6 @@
 
     </Grid>
     </suki:SukiMainHost>
+    </Panel>
+    </LayoutTransformControl>
 </localControls:KugouWindow>

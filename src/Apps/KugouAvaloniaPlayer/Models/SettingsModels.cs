@@ -172,6 +172,8 @@ public class AppSettings
     public CloseBehavior CloseBehavior { get; set; } = CloseBehavior.MinimizeToTray;
     public string AppTheme { get; set; } = ThemeDefault;
     public string GlobalFontFamily { get; set; } = string.Empty;
+    /// <summary>主界面缩放，0 表示按屏幕自动。</summary>
+    public double UiScale { get; set; }
     public string MusicQuality { get; set; } = AudioQuality.Default;
     public PlayMode PlaybackMode { get; set; } = PlayMode.Normal;
     public PlaylistSongSortMode UserPlaylistSongSortMode { get; set; } = PlaylistSongSortMode.Default;

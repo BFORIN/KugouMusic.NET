@@ -317,13 +317,9 @@ public class KugouWindow : Window
 
             var packed = IntPtr.Size == 4 ? lParam.ToInt32() : (int)(lParam.ToInt64() & 0xffffffff);
             var screenPoint = new PixelPoint((short)(packed & 0xffff), (short)(packed >> 16));
-            var size = maximizeButton.Bounds.Size;
-            var topLeft = maximizeButton.PointToScreen(default);
-            var scaling = RenderScaling;
-            var point = new Point(
-                (screenPoint.X - topLeft.X) / scaling,
-                (screenPoint.Y - topLeft.Y) / scaling);
-            var isInside = new Rect(size).Contains(point);
+            // PointToClient accounts for both DPI scaling and the app's UI scale transform.
+            var point = maximizeButton.PointToClient(screenPoint);
+            var isInside = new Rect(maximizeButton.Bounds.Size).Contains(point);
 
             if (pointerOnButton != isInside && pointerOverProperty is not null)
             {

@@ -74,8 +74,15 @@ public partial class NowPlayingView : UserControl
         if (target == null || target.Bounds.Width <= 0 || target.Bounds.Height <= 0)
             return;
 
-        var offset = this.TranslatePoint(new Point(0, 0), target) ?? default;
-        var size = target.Bounds.Size;
+        // Measure MainGrid in this view's coordinates: the main window applies a UI scale
+        // to MainGrid and the inverse scale to this view.
+        var topLeft = target.TranslatePoint(new Point(0, 0), this);
+        var bottomRight = target.TranslatePoint(new Point(target.Bounds.Width, target.Bounds.Height), this);
+        if (topLeft is null || bottomRight is null)
+            return;
+
+        var offset = new Point(-topLeft.Value.X, -topLeft.Value.Y);
+        var size = new Size(bottomRight.Value.X - topLeft.Value.X, bottomRight.Value.Y - topLeft.Value.Y);
         if (_lastSharedBackgroundSize == size && _lastSharedBackgroundOffset == offset)
             return;
 
@@ -83,8 +90,8 @@ public partial class NowPlayingView : UserControl
         var widthChanged = Math.Abs(_lastSharedBackgroundSize.Width - size.Width) > Epsilon;
         _lastSharedBackgroundSize = size;
         _lastSharedBackgroundOffset = offset;
-        SharedBackgroundFrame.Width = target.Bounds.Width;
-        SharedBackgroundFrame.Height = target.Bounds.Height;
+        SharedBackgroundFrame.Width = size.Width;
+        SharedBackgroundFrame.Height = size.Height;
         SharedBackgroundFrame.RenderTransform = new TranslateTransform(-offset.X, -offset.Y);
 
         if (widthChanged)

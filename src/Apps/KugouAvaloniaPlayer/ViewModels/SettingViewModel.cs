@@ -72,6 +72,8 @@ public partial class SettingViewModel : PageViewModelBase
 
     [ObservableProperty] public partial bool LinuxUseFullWindowDecorations { get; set; }
 
+    [ObservableProperty] public partial UiScaleOption SelectedUiScaleOption { get; set; } = UiScale.Options[0];
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CustomBackgroundImageStatus))]
     public partial bool UseCustomBackgroundImage { get; set; }
@@ -224,6 +226,7 @@ public partial class SettingViewModel : PageViewModelBase
             SelectedCloseBehavior = SettingsManager.Settings.CloseBehavior;
             AutoCheckUpdate = SettingsManager.Settings.AutoCheckUpdate;
             SelectedAppFontFamily = AppFontService.FormatGlobalFontSelection(LyricFontFamilyOptions);
+            SelectedUiScaleOption = UiScale.FindOption(SettingsManager.Settings.UiScale);
 #if KUGOU_LINUX
             LinuxUseFullWindowDecorations = SettingsManager.Settings.LinuxUseFullWindowDecorations;
 #endif
@@ -340,6 +343,8 @@ public partial class SettingViewModel : PageViewModelBase
 
     public string[] LyricFontFamilyOptions { get; }
     public string[] AppFontFamilyOptions { get; }
+
+    public UiScaleOption[] UiScaleOptions => UiScale.Options;
     public GlobalShortcutItemViewModel[] ShortcutItems { get; }
     public ObservableCollection<ReleaseNoteItemViewModel> RecentReleaseNotes { get; } = [];
     public ObservableCollection<AudioOutputDevice> OutputDeviceOptions { get; } = [];
@@ -620,6 +625,15 @@ public partial class SettingViewModel : PageViewModelBase
 
         SettingsManager.Settings.AutoCheckUpdate = value;
         SettingsManager.Save();
+    }
+
+    partial void OnSelectedUiScaleOptionChanged(UiScaleOption value)
+    {
+        if (_isApplyingSettingsSnapshot) return;
+
+        SettingsManager.Settings.UiScale = value.Value;
+        SettingsManager.Save();
+        _mainWindowService.ApplyUiScale();
     }
 
 #if KUGOU_LINUX
@@ -1134,6 +1148,7 @@ public partial class SettingViewModel : PageViewModelBase
             SelectedCloseBehavior = SettingsManager.Settings.CloseBehavior;
             AutoCheckUpdate = SettingsManager.Settings.AutoCheckUpdate;
             SelectedAppFontFamily = AppFontService.FormatGlobalFontSelection(LyricFontFamilyOptions);
+            SelectedUiScaleOption = UiScale.FindOption(SettingsManager.Settings.UiScale);
             UseCustomBackgroundImage = SettingsManager.Settings.UseCustomBackgroundImage;
             CustomBackgroundImagePath = SettingsManager.Settings.CustomBackgroundImagePath;
             CustomBackgroundImageOpacity = Math.Clamp(SettingsManager.Settings.CustomBackgroundImageOpacity, 0.1, 1.0);
@@ -1197,6 +1212,7 @@ public partial class SettingViewModel : PageViewModelBase
 #if KUGOU_LINUX
         _mainWindowService.ApplyLinuxWindowDecorations(LinuxUseFullWindowDecorations);
 #endif
+        _mainWindowService.ApplyUiScale();
         NotifyUiPreferencesChanged();
         OnPropertyChanged(nameof(IsDarkMode));
     }

@@ -1,7 +1,20 @@
-<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" xmlns:models="clr-namespace:KugouAvaloniaPlayer.Models" x:Class="KugouAvaloniaPlayer.Views.Settings.AppearanceSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:vm="using:KugouAvaloniaPlayer.ViewModels" xmlns:localControls="using:KugouAvaloniaPlayer.Controls" xmlns:models="clr-namespace:KugouAvaloniaPlayer.Models" xmlns:services="using:KugouAvaloniaPlayer.Services" x:Class="KugouAvaloniaPlayer.Views.Settings.AppearanceSection" x:Name="UserRoot" x:DataType="vm:SettingViewModel">
     <StackPanel>
         <TextBlock Classes="GroupHeader" Text="主题与字体" />
         <localControls:SettingsCard>
+            <localControls:SettingsRow ColumnDefinitions="*,Auto">
+                <StackPanel>
+                    <TextBlock Classes="RowTitle" Text="界面缩放" />
+                    <TextBlock Classes="RowHint" Text="放大文字和控件（包括播放页）。自动会在大屏或高分辨率下按屏幕尺寸放大。" />
+                </StackPanel>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding UiScaleOptions}" SelectedItem="{Binding SelectedUiScaleOption}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="services:UiScaleOption">
+                            <TextBlock Text="{Binding Label}" />
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </localControls:SettingsRow>
             <localControls:SettingsRow ColumnDefinitions="*,Auto">
                 <StackPanel>
                     <TextBlock Classes="RowTitle" Text="深色模式" />

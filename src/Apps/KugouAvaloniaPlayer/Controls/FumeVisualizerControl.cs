@@ -270,6 +270,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             ResetCamera();
         }
         else if (change.Property == BoundsProperty ||
+                 change.Property == ContentScaleProperty ||
                  change.Property == LyricFontFamilyProperty ||
                  change.Property == HeroScaleProperty)
         {
@@ -301,7 +302,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         using var timing = PreparationPerformance.Measure();
         if (!IsRenderingActive)
             return;
-        if (Bounds.Width <= 1 || Bounds.Height <= 1 || Player == null || !IsActive)
+        if (LogicalSize.Width <= 1 || LogicalSize.Height <= 1 || Player == null || !IsActive)
         {
             _fumeScene.Clear();
             RenderOnce();
@@ -323,7 +324,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         if (!_hasFrameTimestamp)
             SnapCameraIfUninitialized(
                 ResolveCameraTarget(article, player.CurrentLyricIndex, seconds, overview), article);
-        _fumeScene.Publish(new Rect(Bounds.Size), new FumeFrame(
+        _fumeScene.Publish(new Rect(LogicalSize), new FumeFrame(
             article, _backgroundShapes, seconds, player.CurrentLyricIndex,
             _lastFrameTimestamp.TotalSeconds, _cameraX, _cameraY, _cameraScale,
             _lastPublishedEnergy, Math.Clamp(BackgroundObjectOpacity, 0, 1),
@@ -347,7 +348,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         if (!_layoutDirty || _article != null && DateTimeOffset.UtcNow < _layoutRebuildAt)
             return;
 
-        var viewport = Bounds.Size;
+        var viewport = LogicalSize;
         var font = LyricFontFamily.ToString();
         var heroScale = Math.Clamp(HeroScale, 0.82, 1.32);
         _layoutDirty = false;
@@ -441,7 +442,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
     {
         return IsActive &&
                IsRenderingActive &&
-               Bounds is { Width: > 1, Height: > 1 } &&
+               LogicalSize is { Width: > 1, Height: > 1 } &&
                TopLevel.GetTopLevel(this) != null &&
                (Player?.IsPlayingAudio == true || _settleFrames > 0 || _layoutDirty);
     }
@@ -508,7 +509,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         if (CameraTrackingMode == FumeCameraTrackingMode.Stepped)
             printed = Math.Floor(printed);
         var point = ResolveFocusPoint(block, printed);
-        var targetLineHeight = Math.Clamp(Math.Min(Bounds.Width, Bounds.Height) * 0.115, 64, 124);
+        var targetLineHeight = Math.Clamp(Math.Min(LogicalSize.Width, LogicalSize.Height) * 0.115, 64, 124);
         var scale = Math.Clamp(targetLineHeight / Math.Max(block.LineHeight, 1), 0.88, 2.2);
         return new CameraTarget(point.X, point.Y, scale, block.SourceLineIndex);
     }
@@ -528,7 +529,7 @@ public sealed class FumeVisualizerControl : SilkEffectControl
             var deltaY = entryPoint.Y - _cameraY;
             var screenDistance = Math.Sqrt(deltaX * deltaX + deltaY * deltaY) *
                                  Math.Max(_cameraScale, target.Scale);
-            var minimumSide = Math.Max(Math.Min(Bounds.Width, Bounds.Height), 1);
+            var minimumSide = Math.Max(Math.Min(LogicalSize.Width, LogicalSize.Height), 1);
             _useOverviewBridge = target.SourceIndex >= 0 && screenDistance >= minimumSide * 2.75;
             _retargetDuration = _useOverviewBridge
                 ? Math.Clamp((0.3 + screenDistance / minimumSide / 18) / speed, 0.22, 0.9)
@@ -627,11 +628,11 @@ public sealed class FumeVisualizerControl : SilkEffectControl
         var minY = article.Blocks.AsValueEnumerable().Min(block => block.Y);
         var maxX = article.Blocks.AsValueEnumerable().Max(block => block.X + block.Width);
         var maxY = article.Blocks.AsValueEnumerable().Max(block => block.Y + block.Height);
-        var paddingX = Math.Clamp(Bounds.Width * 0.2, 120, 280);
-        var paddingY = Math.Clamp(Bounds.Height * 0.2, 96, 220);
+        var paddingX = Math.Clamp(LogicalSize.Width * 0.2, 120, 280);
+        var paddingY = Math.Clamp(LogicalSize.Height * 0.2, 96, 220);
         var scale = Math.Min(
-            Bounds.Width / Math.Max(maxX - minX + paddingX * 2, 1),
-            Bounds.Height / Math.Max(maxY - minY + paddingY * 2, 1));
+            LogicalSize.Width / Math.Max(maxX - minX + paddingX * 2, 1),
+            LogicalSize.Height / Math.Max(maxY - minY + paddingY * 2, 1));
         return new CameraTarget(
             (minX + maxX) * 0.5,
             (minY + maxY) * 0.5,

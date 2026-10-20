@@ -9,6 +9,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.VisualTree;
 using KugouAvaloniaPlayer.Models;
 using KugouAvaloniaPlayer.Services;
@@ -24,6 +26,9 @@ public partial class MainWindow : KugouWindow
     private PixelPoint? _lastNormalPosition;
     private Size? _lastNormalSize;
     private bool _isDialogOpen;
+    private readonly double _baseMinWidth;
+    private readonly double _baseMinHeight;
+    private double _appliedUiScale = 1;
 
 #if KUGOU_WINDOWS
     private WindowsTaskbarThumbnailToolbar? _taskbarToolbar;
@@ -35,6 +40,8 @@ public partial class MainWindow : KugouWindow
     public MainWindow()
     {
         InitializeComponent();
+        _baseMinWidth = MinWidth;
+        _baseMinHeight = MinHeight;
         InitializeWindowChrome(TitleBar, MaximizeButton, MainGrid);
         ApplyLinuxSystemWindowDecorationsFallback();
         RestoreWindowState();
@@ -44,7 +51,13 @@ public partial class MainWindow : KugouWindow
                                             | RendererDebugOverlays.RenderTimeGraph;
 #endif*/
 
-        PositionChanged += (_, _) => CaptureNormalBounds();
+        PositionChanged += (_, _) =>
+        {
+            CaptureNormalBounds();
+            if (UiScale.Normalize(SettingsManager.Settings.UiScale) == UiScale.Auto)
+                ApplyUiScale();
+        };
+        ScalingChanged += (_, _) => ApplyUiScale();
     }
 
     public bool CanClose { get; set; }
@@ -123,6 +136,38 @@ public partial class MainWindow : KugouWindow
 #endif
     }
 
+    /// <summary>
+    ///     按设置（或窗口所在屏幕）应用主界面缩放。
+    /// </summary>
+    public void ApplyUiScale()
+    {
+        var screen = Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var scale = UiScale.Resolve(SettingsManager.Settings.UiScale, screen);
+        if (Math.Abs(scale - _appliedUiScale) < 0.001)
+            return;
+
+        _appliedUiScale = scale;
+        var isScaled = Math.Abs(scale - 1) >= 0.001;
+        UiScaleHost.LayoutTransform = isScaled ? new ScaleTransform(scale, scale) : null;
+        UiScale.Current = scale;
+        UpdateMinimumSize(screen, scale);
+    }
+
+    private void UpdateMinimumSize(Screen? screen, double scale)
+    {
+        // 放大后的最小尺寸不能超过屏幕工作区，否则小屏上窗口会放不下。
+        var maxWidth = double.PositiveInfinity;
+        var maxHeight = double.PositiveInfinity;
+        if (screen is { Scaling: > 0 })
+        {
+            maxWidth = screen.WorkingArea.Width / screen.Scaling;
+            maxHeight = screen.WorkingArea.Height / screen.Scaling;
+        }
+
+        MinWidth = Math.Max(_baseMinWidth, Math.Min(_baseMinWidth * scale, maxWidth));
+        MinHeight = Math.Max(_baseMinHeight, Math.Min(_baseMinHeight * scale, maxHeight));
+    }
+
     protected override void OnClosing(WindowClosingEventArgs e)
     {
 #if KUGOU_MACOS
@@ -173,6 +218,7 @@ public partial class MainWindow : KugouWindow
     protected override void OnOpened(EventArgs e)
     {
         base.OnOpened(e);
+        ApplyUiScale();
 #if KUGOU_WINDOWS
         InitializeTaskbarThumbnailToolbar();
 #endif

@@ -118,7 +118,7 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <ScrollViewer Padding="0,0,0,-50">
+                    <ScrollViewer Padding="0,0,0,50">
                         <ScrollViewer.IsVisible>
                             <MultiBinding Converter="{x:Static BoolConverters.And}">
                                 <Binding Path="HasSearched" />
@@ -148,7 +148,7 @@
                         </ItemsRepeater>
                     </ScrollViewer>
 
-                    <ScrollViewer Padding="0,0,0,-50">
+                    <ScrollViewer Padding="0,0,0,50">
                         <ScrollViewer.IsVisible>
                             <MultiBinding Converter="{x:Static BoolConverters.And}">
                                 <Binding Path="HasSearched" />
@@ -178,7 +178,7 @@
                         </ItemsRepeater>
                     </ScrollViewer>
 
-                    <ScrollViewer Padding="0,0,0,-50">
+                    <ScrollViewer Padding="0,0,0,50">
                         <ScrollViewer.IsVisible>
                             <MultiBinding Converter="{x:Static BoolConverters.And}">
                                 <Binding Path="HasSearched" />

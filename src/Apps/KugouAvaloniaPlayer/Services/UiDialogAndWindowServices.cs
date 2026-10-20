@@ -40,6 +40,7 @@ public interface IMainWindowService
     void ToggleMaximize();
     void Close();
     void ApplyLinuxWindowDecorations(bool useFullDecorations);
+    void ApplyUiScale();
 }
 
 internal static class MainWindowPresentationHelper
@@ -595,6 +596,15 @@ public sealed class MainWindowService(IUiDispatcherService uiDispatcher) : IMain
         {
             if (MainWindow is MainWindow window)
                 window.ApplyLinuxWindowDecorations(useFullDecorations);
+        });
+    }
+
+    public void ApplyUiScale()
+    {
+        uiDispatcher.RunOrPost(() =>
+        {
+            if (MainWindow is MainWindow window)
+                window.ApplyUiScale();
         });
     }
 }

@@ -121,12 +121,14 @@
                behaviors:LocalArtworkImageBehavior.IsEnabled="{Binding IsFoliaLatentMaterialActive}"
                behaviors:NowPlayingRemoteImageBehavior.Source="{Binding Player.DisplayedPlayingSong.Cover, Converter={StaticResource RemoteImageSourceConverter}}"
                behaviors:NowPlayingRemoteImageBehavior.IsEnabled="{Binding IsFoliaLatentMaterialActive}" />
-        <controls:LatentBackgroundControl x:Name="FoliaBackground"
-               Player="{Binding Player}"
-               Cover="{Binding #FoliaCoverImage.Source}"
-               IsSonnet="{Binding IsSonnetTheme}"
-               IsActive="{Binding IsFoliaLatentMaterialActive}"
-               IsVisible="{Binding IsFoliaLatentMaterialActive}" />
+        <controls:NativeResolutionHost IsHitTestVisible="False">
+            <controls:LatentBackgroundControl x:Name="FoliaBackground"
+                   Player="{Binding Player}"
+                   Cover="{Binding #FoliaCoverImage.Source}"
+                   IsSonnet="{Binding IsSonnetTheme}"
+                   IsActive="{Binding IsFoliaLatentMaterialActive}"
+                   IsVisible="{Binding IsFoliaLatentMaterialActive}" />
+        </controls:NativeResolutionHost>
         <Grid x:Name="ThemeContentHost" />
         <TextBlock Text="{Binding #FoliaBackground.LastError}"
                    Foreground="#FFFFD4C4" Background="#E0201010"

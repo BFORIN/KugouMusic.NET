@@ -37,24 +37,26 @@
     <Grid ClipToBounds="True">
         <!-- The shared latent GL layer owns material and darkening. -->
 
-        <controls:FumeVisualizerControl
-            x:Name="FumeSurface"
-            Player="{Binding Player}"
-            IsActive="{Binding IsOpen}"
-            LyricFontFamily="{Binding LyricFontFamily}"
-            LyricColor="{Binding LyricColor}"
-            BackgroundObjectOpacity="{Binding FumeTuning.BackgroundObjectOpacity}"
-            TextHoldRatio="{Binding FumeTuning.TextHoldRatio}"
-            CameraTrackingMode="{Binding FumeTuning.CameraTrackingMode}"
-            CameraSpeed="{Binding FumeTuning.CameraSpeed}"
-            GlowIntensity="{Binding FumeTuning.GlowIntensity}"
-            HeroScale="{Binding FumeTuning.HeroScale}"
-            ParallaxEnabled="{Binding FumeParallaxTuning.Enabled}"
-            ParallaxMaxTilt="{Binding FumeParallaxTuning.MaxTilt}"
-            ParallaxResponse="{Binding FumeParallaxTuning.Response}"
-            ParallaxOriginX="{Binding FumeParallaxTuning.OriginX}"
-            ParallaxOriginY="{Binding FumeParallaxTuning.OriginY}"
-            IsHitTestVisible="False" />
+        <controls:NativeResolutionHost IsHitTestVisible="False">
+            <controls:FumeVisualizerControl
+                x:Name="FumeSurface"
+                Player="{Binding Player}"
+                IsActive="{Binding IsOpen}"
+                LyricFontFamily="{Binding LyricFontFamily}"
+                LyricColor="{Binding LyricColor}"
+                BackgroundObjectOpacity="{Binding FumeTuning.BackgroundObjectOpacity}"
+                TextHoldRatio="{Binding FumeTuning.TextHoldRatio}"
+                CameraTrackingMode="{Binding FumeTuning.CameraTrackingMode}"
+                CameraSpeed="{Binding FumeTuning.CameraSpeed}"
+                GlowIntensity="{Binding FumeTuning.GlowIntensity}"
+                HeroScale="{Binding FumeTuning.HeroScale}"
+                ParallaxEnabled="{Binding FumeParallaxTuning.Enabled}"
+                ParallaxMaxTilt="{Binding FumeParallaxTuning.MaxTilt}"
+                ParallaxResponse="{Binding FumeParallaxTuning.Response}"
+                ParallaxOriginX="{Binding FumeParallaxTuning.OriginX}"
+                ParallaxOriginY="{Binding FumeParallaxTuning.OriginY}"
+                IsHitTestVisible="False" />
+        </controls:NativeResolutionHost>
 
         <TextBlock Text="{Binding #FumeSurface.LastError}"
                    Foreground="#FFFFD4C4"

@@ -161,7 +161,7 @@
                         <Border Classes="daily-badge"
                                 HorizontalAlignment="Left">
                             <TextBlock Text="DAILY RECOMMENDATION"
-                                       FontSize="10"
+                                       FontSize="11"
                                        FontWeight="Heavy"
                                        Foreground="White" />
                         </Border>

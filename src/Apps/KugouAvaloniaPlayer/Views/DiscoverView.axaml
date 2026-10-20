@@ -186,7 +186,7 @@
                                                                                TextWrapping="NoWrap"
                                                                                TextTrimming="CharacterEllipsis" />
                                                                     <TextBlock Text="{Binding Description}"
-                                                                               FontSize="11"
+                                                                               FontSize="12"
                                                                                Foreground="#C9D2E8"
                                                                                MaxWidth="140"
                                                                                MaxLines="1"
