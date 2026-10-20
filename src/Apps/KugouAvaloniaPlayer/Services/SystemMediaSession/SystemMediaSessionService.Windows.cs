@@ -233,7 +233,7 @@ public sealed class SystemMediaSessionService(
     private async Task<string?> ResolveArtworkPathAsync(string? cover)
     {
         if (string.IsNullOrWhiteSpace(cover))
-            return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.png");
+            return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.webp");
 
         if (cover.StartsWith("avares://", StringComparison.OrdinalIgnoreCase))
             return await CopyAssetArtworkAsync(cover);
@@ -247,7 +247,7 @@ public sealed class SystemMediaSessionService(
                 return uri.LocalPath;
         }
 
-        return File.Exists(cover) ? cover : await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.png");
+        return File.Exists(cover) ? cover : await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.webp");
     }
 
     private async Task<string?> DownloadArtworkAsync(Uri uri)
@@ -263,7 +263,7 @@ public sealed class SystemMediaSessionService(
                 uri,
                 HttpCompletionOption.ResponseHeadersRead);
             if (!response.IsSuccessStatusCode)
-                return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.png");
+                return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.webp");
 
             var contentExtension = GetArtworkExtension(response.Content.Headers.ContentType?.MediaType);
             if (!string.Equals(contentExtension, Path.GetExtension(cachePath), StringComparison.OrdinalIgnoreCase))
@@ -277,7 +277,7 @@ public sealed class SystemMediaSessionService(
         catch (Exception ex)
         {
             logger.LogDebug(ex, "下载 Windows 系统媒体控件封面失败。");
-            return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.png");
+            return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.webp");
         }
     }
 

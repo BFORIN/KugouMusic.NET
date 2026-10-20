@@ -19,7 +19,7 @@ namespace KugouAvaloniaPlayer.ViewModels;
 
 public partial class DailyRecommendViewModel : PageViewModelBase, IDisposable
 {
-    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/Default.png";
+    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/Default.webp";
     private readonly RecommendClient _discoveryClient;
     private readonly ILogger<DailyRecommendViewModel> _logger;
     private readonly PlayerViewModel _player;

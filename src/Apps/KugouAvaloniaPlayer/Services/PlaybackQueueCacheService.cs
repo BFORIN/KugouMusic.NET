@@ -16,7 +16,7 @@ public sealed class PlaybackQueueCacheService(ILogger<PlaybackQueueCacheService>
     private const int CacheSchemaVersion = 1;
     private const string StoreScope = "playback_queue";
     private const string StoreKey = "app";
-    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
     public PlaybackQueueCacheSnapshot? Load()
     {

@@ -800,7 +800,7 @@ public sealed class SystemMediaSessionService(
     private async Task<string?> ResolveArtworkUrlAsync(string? cover)
     {
         if (string.IsNullOrWhiteSpace(cover))
-            return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.png")
+            return await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.webp")
                 .ConfigureAwait(false);
 
         if (cover.StartsWith("avares://", StringComparison.OrdinalIgnoreCase))
@@ -814,7 +814,7 @@ public sealed class SystemMediaSessionService(
 
         return File.Exists(cover)
             ? new Uri(System.IO.Path.GetFullPath(cover)).AbsoluteUri
-            : await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.png")
+            : await CopyAssetArtworkAsync("avares://KugouAvaloniaPlayer/Assets/default_song.webp")
                 .ConfigureAwait(false);
     }
 

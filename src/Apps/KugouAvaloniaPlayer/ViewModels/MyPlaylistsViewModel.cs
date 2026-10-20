@@ -27,8 +27,8 @@ public partial class MyPlaylistsViewModel : PageViewModelBase, IDisposable
     private const int UserPlaylistPageSize = 100;
     private const int PlaylistSongPageSize = 200;
     private const int MaxUserPlaylistPages = 200;
-    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
-    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
+    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
     private const string LikeCover = "avares://KugouAvaloniaPlayer/Assets/LikeList.jpg";
 
     private readonly ICreatePlaylistDialogService _createPlaylistDialogService;

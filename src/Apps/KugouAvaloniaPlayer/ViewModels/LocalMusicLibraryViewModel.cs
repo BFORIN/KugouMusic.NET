@@ -23,8 +23,8 @@ public partial class LocalMusicLibraryViewModel : PageViewModelBase
     private const string DefaultSortText = "默认排序";
     private const string ArtistSortText = "按歌手排序";
     private const string AlbumSortText = "按专辑排序";
-    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
-    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
+    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
     private readonly ICreatePlaylistDialogService _createPlaylistDialogService;
     private readonly IFolderPickerService _folderPickerService;

@@ -15,7 +15,7 @@
         <ResourceDictionary>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <x:String x:Key="DailyRecommendHeroBackground">avares://KugouAvaloniaPlayer/Assets/daily-recommend-hero.png</x:String>
+                    <x:String x:Key="DailyRecommendHeroBackground">avares://KugouAvaloniaPlayer/Assets/daily-recommend-hero.webp</x:String>
                     <Color x:Key="DailyHeroOverlayTop">#100B1D42</Color>
                     <Color x:Key="DailyHeroOverlayMid">#180B1D42</Color>
                     <Color x:Key="DailyHeroOverlayBottom">#300B1D42</Color>
@@ -29,7 +29,7 @@
                 </ResourceDictionary>
 
                 <ResourceDictionary x:Key="Dark">
-                    <x:String x:Key="DailyRecommendHeroBackground">avares://KugouAvaloniaPlayer/Assets/daily-recommend-hero-dark.png</x:String>
+                    <x:String x:Key="DailyRecommendHeroBackground">avares://KugouAvaloniaPlayer/Assets/daily-recommend-hero-dark.webp</x:String>
                     <Color x:Key="DailyHeroOverlayTop">#24101B35</Color>
                     <Color x:Key="DailyHeroOverlayMid">#34101B35</Color>
                     <Color x:Key="DailyHeroOverlayBottom">#68101B35</Color>
@@ -268,7 +268,7 @@
                                             HorizontalAlignment="Center"
                                             VerticalAlignment="Center"
                                             Background="#20FFFFFF">
-                                        <Image asyncImageLoader:ImageLoader.Source="{Binding CurrentFmPreviewSong.Cover, FallbackValue=avares://KugouAvaloniaPlayer/Assets/Default.png, TargetNullValue=avares://KugouAvaloniaPlayer/Assets/Default.png}"
+                                        <Image asyncImageLoader:ImageLoader.Source="{Binding CurrentFmPreviewSong.Cover, FallbackValue=avares://KugouAvaloniaPlayer/Assets/Default.webp, TargetNullValue=avares://KugouAvaloniaPlayer/Assets/Default.webp}"
                                                              Stretch="UniformToFill" />
                                     </Border>
                                     <Button Classes="fm-play-fab"

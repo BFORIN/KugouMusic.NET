@@ -23,7 +23,7 @@ public sealed class PersonalFmService(
     ILogger<PersonalFmService> logger)
     : IDisposable
 {
-    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/Default.png";
+    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/Default.webp";
     private readonly SemaphoreSlim _lock = new(1, 1);
     private readonly PersonalFmSessionState _session = new();
 

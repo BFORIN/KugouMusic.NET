@@ -3,7 +3,7 @@
         <localControls:SettingsCard>
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16" Margin="18">
                 <Border Width="72" Height="72" CornerRadius="18" ClipToBounds="True" Background="{DynamicResource SukiPrimaryColorLow}">
-                    <Image Source="/Assets/ka-logo.png" Stretch="UniformToFill" />
+                    <Image Source="/Assets/ka-logo.webp" Stretch="UniformToFill" />
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
                     <TextBlock Text="{Binding AppDisplayName}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />

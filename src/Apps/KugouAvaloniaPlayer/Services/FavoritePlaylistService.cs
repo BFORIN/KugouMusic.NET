@@ -883,7 +883,7 @@ public partial class FavoritePlaylistService(
             FileId = x.FileId,
             Singers = x.Singers ?? new List<SingerLite>(),
             Cover = string.IsNullOrWhiteSpace(x.Cover)
-                ? "avares://KugouAvaloniaPlayer/Assets/default_song.png"
+                ? "avares://KugouAvaloniaPlayer/Assets/default_song.webp"
                 : x.Cover,
             DurationSeconds = x.DurationSeconds > 0 ? x.DurationSeconds : 0
         }).ToList();

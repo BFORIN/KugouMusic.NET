@@ -225,7 +225,7 @@ public partial class GroupedSearchResultItemViewModel : ObservableObject
 
     private static string ResolvePlaylistCover(string? coverPath)
     {
-        const string defaultPlaylistCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
+        const string defaultPlaylistCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
 
         if (string.IsNullOrWhiteSpace(coverPath))
             return defaultPlaylistCover;
@@ -244,7 +244,7 @@ public partial class GroupedSearchResultItemViewModel : ObservableObject
 
     private static string ResolveCover(LocalTrackItem track)
     {
-        const string defaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+        const string defaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
         if (string.Equals(track.SourceType, LocalMusicLibraryService.SourceTypeJellyfin, StringComparison.Ordinal))
             return string.IsNullOrWhiteSpace(track.CoverPath) ? defaultSongCover : track.CoverPath;

@@ -44,17 +44,17 @@ public partial class SongCollectionDetailView : UserControl
     public static readonly StyledProperty<string> LightHeroBackgroundProperty =
         AvaloniaProperty.Register<SongCollectionDetailView, string>(
             nameof(LightHeroBackground),
-            "avares://KugouAvaloniaPlayer/Assets/light.png");
+            "avares://KugouAvaloniaPlayer/Assets/light.webp");
 
     public static readonly StyledProperty<string> NightHeroBackgroundProperty =
         AvaloniaProperty.Register<SongCollectionDetailView, string>(
             nameof(NightHeroBackground),
-            "avares://KugouAvaloniaPlayer/Assets/night.png");
+            "avares://KugouAvaloniaPlayer/Assets/night.webp");
 
     public static readonly StyledProperty<string> CurrentHeroBackgroundProperty =
         AvaloniaProperty.Register<SongCollectionDetailView, string>(
             nameof(CurrentHeroBackground),
-            "avares://KugouAvaloniaPlayer/Assets/light.png");
+            "avares://KugouAvaloniaPlayer/Assets/light.webp");
 
     public static readonly StyledProperty<string?> TitleProperty =
         AvaloniaProperty.Register<SongCollectionDetailView, string?>(nameof(Title));

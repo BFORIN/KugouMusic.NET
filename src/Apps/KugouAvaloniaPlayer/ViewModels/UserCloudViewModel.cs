@@ -21,8 +21,8 @@ public partial class UserCloudViewModel(
     ILogger<UserCloudViewModel> logger) : PageViewModelBase
 {
     private const int PageSize = 100;
-    private const string DefaultCollectionCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
-    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultCollectionCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
+    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
     private int _currentPage = 1;
     private CancellationTokenSource? _backgroundLoadCts;

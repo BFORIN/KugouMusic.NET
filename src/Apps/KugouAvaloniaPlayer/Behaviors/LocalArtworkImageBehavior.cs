@@ -16,7 +16,7 @@ namespace KugouAvaloniaPlayer.Behaviors;
 
 public static class LocalArtworkImageBehavior
 {
-    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
     private const int DefaultDecodePixelWidth = 96;
 
     private static readonly ConditionalWeakTable<Image, ImageState> States = new();

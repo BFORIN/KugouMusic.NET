@@ -15,7 +15,7 @@ namespace KugouAvaloniaPlayer.ViewModels;
 public partial class RankItem : ObservableObject
 {
     [ObservableProperty]
-    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/Default.png";
+    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/Default.webp";
 
     [ObservableProperty]
     public partial string Name { get; set; } = "";
@@ -36,7 +36,7 @@ public sealed class RankSection
 
 public partial class RankViewModel : PageViewModelBase
 {
-    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/Default.png";
+    private const string DefaultCover = "avares://KugouAvaloniaPlayer/Assets/Default.webp";
     private readonly ILogger<RankViewModel> _logger;
     private readonly INavigationService _navigationService;
     private readonly RankClient _rankClient;

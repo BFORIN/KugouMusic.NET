@@ -23,7 +23,7 @@ public partial class DiscoverTopCard : ObservableObject
     public partial int CardId { get; set; }
 
     [ObservableProperty]
-    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
+    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
 
     [ObservableProperty]
     public partial string Description { get; set; } = "";
@@ -40,7 +40,7 @@ public partial class DiscoverTopCard : ObservableObject
 public partial class DiscoverPlaylist : ObservableObject
 {
     [ObservableProperty]
-    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
+    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
 
     [ObservableProperty]
     public partial string CreatorName { get; set; } = "";
@@ -86,7 +86,7 @@ public sealed class DiscoverRankSongPreview
 public partial class DiscoverRankCard : ObservableObject
 {
     [ObservableProperty]
-    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
     [ObservableProperty]
     public partial string Name { get; set; } = "";
@@ -99,8 +99,8 @@ public partial class DiscoverRankCard : ObservableObject
 
 public partial class DiscoverViewModel : PageViewModelBase
 {
-    private const string DefaultCardCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
-    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultCardCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
+    private const string DefaultSongCover = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
     private const int PlaylistPageSize = 30;
     private const int PlaylistSongPageSize = 200;
 

@@ -30,7 +30,7 @@ public partial class TrackPlaylistSearchDialogViewModel : ObservableObject, IDis
         Artist = song.Singer;
         Album = string.IsNullOrWhiteSpace(song.AlbumName) ? "未知专辑" : song.AlbumName;
         Duration = song.DurationSeconds;
-        Cover = song.Cover ?? "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+        Cover = song.Cover ?? "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
         TrackId = song.LocalTrackId;
 
         _ = LoadPlaylistsAsync();
@@ -115,7 +115,7 @@ public partial class TrackPlaylistSearchDialogViewModel : ObservableObject, IDis
 
     private static string ResolvePlaylistCover(string? coverPath)
     {
-        const string defaultPlaylistCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.png";
+        const string defaultPlaylistCover = "avares://KugouAvaloniaPlayer/Assets/default_listcard.webp";
 
         if (string.IsNullOrWhiteSpace(coverPath))
             return defaultPlaylistCover;

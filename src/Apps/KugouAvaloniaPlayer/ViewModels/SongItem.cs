@@ -22,7 +22,7 @@ public partial class SongItem : ObservableObject
     public partial long AudioId { get; set; }
 
     [ObservableProperty]
-    public partial string? Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    public partial string? Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
     [ObservableProperty]
     public partial double DurationSeconds { get; set; }
@@ -114,7 +114,7 @@ public partial class PlaylistItem : ObservableObject
     public partial int Count { get; set; }
 
     [ObservableProperty]
-    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    public partial string Cover { get; set; } = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
 
     [ObservableProperty]
     public partial string Id { get; set; } = "";

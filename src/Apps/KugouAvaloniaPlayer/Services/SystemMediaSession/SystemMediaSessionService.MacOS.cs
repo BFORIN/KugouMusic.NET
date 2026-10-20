@@ -20,7 +20,7 @@ public sealed class SystemMediaSessionService(
     IHttpClientFactory httpClientFactory,
     ILogger<SystemMediaSessionService> logger) : ISystemMediaSessionService
 {
-    private const string DefaultArtwork = "avares://KugouAvaloniaPlayer/Assets/default_song.png";
+    private const string DefaultArtwork = "avares://KugouAvaloniaPlayer/Assets/default_song.webp";
     private static readonly TimeSpan TimelineUpdateInterval = TimeSpan.FromMilliseconds(750);
     private static readonly IntPtr SelAlloc = sel_registerName("alloc");
     private static readonly IntPtr SelInit = sel_registerName("init");

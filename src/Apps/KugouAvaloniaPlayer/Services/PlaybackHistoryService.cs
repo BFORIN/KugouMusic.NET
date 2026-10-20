@@ -215,7 +215,7 @@ public sealed class PlaybackHistoryService(
             FileId = item.FileId,
             Singers = item.Singers ?? new List<SingerLite>(),
             Cover = string.IsNullOrWhiteSpace(item.Cover)
-                ? "avares://KugouAvaloniaPlayer/Assets/default_song.png"
+                ? "avares://KugouAvaloniaPlayer/Assets/default_song.webp"
                 : item.Cover,
             DurationSeconds = item.DurationSeconds,
             LocalFilePath = item.LocalFilePath,
