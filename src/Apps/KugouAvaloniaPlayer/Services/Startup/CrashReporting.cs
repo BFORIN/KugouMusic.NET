@@ -86,26 +86,29 @@ internal static class CrashReporting
     private static void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
         var exception = e.ExceptionObject as Exception;
-        TryLogFatal(exception, "发生未处理的应用程序异常，IsTerminating={IsTerminating}", e.IsTerminating);
+        TryLogFatal(exception, e.IsTerminating, "发生未处理的应用程序异常，IsTerminating={IsTerminating}", e.IsTerminating);
     }
 
     private static void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
     {
-        TryLogFatal(e.Exception, "发生未观察到的任务异常");
+        TryLogFatal(e.Exception, false, "发生未观察到的任务异常");
+        e.SetObserved();
     }
 
     private static void OnUiThreadUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
-        TryLogFatal(e.Exception, "发生未处理的 UI 线程异常");
+        TryLogFatal(e.Exception, false, "发生未处理的 UI 线程异常");
+        e.Handled = true;
     }
 
-    private static void TryLogFatal(Exception? exception, string messageTemplate, params object?[] args)
+    private static void TryLogFatal(Exception? exception, bool isTerminating, string messageTemplate, params object?[] args)
     {
         try
         {
             ConfigureLogging();
             Log.Fatal(exception, messageTemplate, args);
-            Log.CloseAndFlush();
+            if (isTerminating)
+                Log.CloseAndFlush();
         }
         catch (Exception loggingException)
         {

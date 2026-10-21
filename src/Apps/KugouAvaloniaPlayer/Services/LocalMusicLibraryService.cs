@@ -466,6 +466,8 @@ public sealed class LocalMusicLibraryService(IJellyfinClient jellyfinClient, ILo
         if (!Directory.Exists(folderPath))
             throw new DirectoryNotFoundException(folderPath);
 
+        folderPath = Path.GetFullPath(folderPath);
+
         await using var connection = await AppDatabase.CreateConnectionAsync(cancellationToken);
         await using var transaction = connection.BeginTransaction();
 
@@ -478,8 +480,13 @@ public sealed class LocalMusicLibraryService(IJellyfinClient jellyfinClient, ILo
 
         if (playlist == null) {
             var now = DateTime.UtcNow;
+            var dirInfo = new DirectoryInfo(folderPath);
+            var dirName = string.IsNullOrWhiteSpace(dirInfo.Name) || dirInfo.Name == Path.DirectorySeparatorChar.ToString()
+                ? folderPath
+                : dirInfo.Name;
+
             playlist = new LocalPlaylistEntity {
-                Name = new DirectoryInfo(folderPath).Name,
+                Name = dirName,
                 Kind = PlaylistKindImportedFolder,
                 SourceRef = folderPath,
                 CreatedAtUtc = now,
@@ -701,43 +708,46 @@ public sealed class LocalMusicLibraryService(IJellyfinClient jellyfinClient, ILo
             new BoundedChannelOptions(4) {
                 FullMode = BoundedChannelFullMode.Wait, SingleReader = true, SingleWriter = true
             });
+        using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = producerCancellation.Token;
 
         var producer = Task.Run(
             async () => {
                 try {
-                    foreach (var fileBatch in EnumerateSupportedAudioFileBatches(folderPath, LocalImportBatchSize)) {
-                        cancellationToken.ThrowIfCancellationRequested();
+                    foreach (var fileBatch in EnumerateSupportedAudioFileBatches(folderPath, LocalImportBatchSize, producerToken)) {
                         var importedBatch = await PrepareLocalTrackBatchAsync(
                             fileBatch,
                             legacySongCovers,
-                            cancellationToken);
-                        await channel.Writer.WriteAsync(importedBatch, cancellationToken);
+                            producerToken);
+                        await channel.Writer.WriteAsync(importedBatch, producerToken);
                     }
 
                     channel.Writer.TryComplete();
                 } catch (Exception ex) {
                     channel.Writer.TryComplete(ex);
-                    throw;
                 }
-            },
-            cancellationToken);
+            });
 
         var position = 0;
-        await foreach (var importedBatch in channel.Reader.ReadAllAsync(cancellationToken)) {
-            foreach (var importedTrack in importedBatch) {
-                var track = await UpsertTrackAsync(connection, transaction, importedTrack, cancellationToken);
-                await InsertPlaylistTrackAsync(
-                    connection,
-                    transaction,
-                    playlistId,
-                    track.Id,
-                    position++,
-                    DateTime.UtcNow,
-                    cancellationToken);
+        try {
+            await foreach (var importedBatch in channel.Reader.ReadAllAsync(cancellationToken)) {
+                foreach (var importedTrack in importedBatch) {
+                    var track = await UpsertTrackAsync(connection, transaction, importedTrack, cancellationToken);
+                    await InsertPlaylistTrackAsync(
+                        connection,
+                        transaction,
+                        playlistId,
+                        track.Id,
+                        position++,
+                        DateTime.UtcNow,
+                        cancellationToken);
+                }
             }
+        } finally {
+            // Stop a writer waiting on the bounded channel if the consumer fails.
+            await producerCancellation.CancelAsync();
+            await producer;
         }
-
-        await producer;
     }
 
     private async Task<LocalTrackEntity> UpsertTrackAsync(
@@ -1378,11 +1388,20 @@ public sealed class LocalMusicLibraryService(IJellyfinClient jellyfinClient, ILo
             cancellationToken);
     }
 
+    private static readonly EnumerationOptions SafeFolderEnumerationOptions = new() {
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true,
+        AttributesToSkip = FileAttributes.ReparsePoint
+    };
+
     private static IEnumerable<IReadOnlyList<string>> EnumerateSupportedAudioFileBatches(
         string folderPath,
-        int batchSize) {
+        int batchSize,
+        CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
         var batch = new List<string>(batchSize);
-        foreach (var filePath in Directory.EnumerateFiles(folderPath, "*.*", SearchOption.AllDirectories)) {
+        foreach (var filePath in Directory.EnumerateFiles(folderPath, "*.*", SafeFolderEnumerationOptions)) {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!IsSupportedAudioFile(filePath))
                 continue;
 
@@ -1429,7 +1448,7 @@ public sealed class LocalMusicLibraryService(IJellyfinClient jellyfinClient, ILo
     }
 
     private static bool IsSupportedAudioFile(string filePath) {
-        return File.Exists(filePath) && _supportedLocalAudioExtensions.Contains(Path.GetExtension(filePath));
+        return _supportedLocalAudioExtensions.Contains(Path.GetExtension(filePath)) && File.Exists(filePath);
     }
 
     private static bool IsUsableFile(string? filePath) {
