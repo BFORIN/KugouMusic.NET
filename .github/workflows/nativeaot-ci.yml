@@ -69,6 +69,7 @@ jobs:
             -r win-x64 `
             --self-contained true `
             -p:PublishAot=true `
+            -p:IlcSingleThreaded=true `
             -p:DebugType=None `
             -p:DebugSymbols=false `
             -o artifacts/nativeaot

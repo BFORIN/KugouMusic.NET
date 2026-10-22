@@ -81,6 +81,7 @@ jobs:
             --self-contained true \
             -p:DebugType=None \
             -p:PublishAot=${{ matrix.rid != 'linux-arm64' }} \
+            -p:IlcSingleThreaded=true \
             -p:DebugSymbols=false \
             -o ./publish
 
@@ -237,6 +238,7 @@ jobs:
             --self-contained true \
             -p:DebugType=None \
             -p:PublishAot=true \
+            -p:IlcSingleThreaded=true \
             -p:DebugSymbols=false \
             -o ./publish/macos
 

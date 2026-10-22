@@ -97,6 +97,7 @@ jobs:
             -r android-arm64 \
             --self-contained true \
             -p:PublishAot=true \
+            -p:IlcSingleThreaded=true \
             -p:PublishAotUsingRuntimePack=true \
             -p:CppCompilerAndLinker="$ANDROID_ARM64_CLANG" \
             -p:ObjCopyName="$ANDROID_LLVM_OBJCOPY" \
@@ -183,6 +184,7 @@ jobs:
               -r "$rid" \
               --self-contained true \
               -p:PublishAot=true \
+              -p:IlcSingleThreaded=true \
               -p:PublishAotUsingRuntimePack=true \
               -p:DebugType=None \
               -p:DebugSymbols=false \
