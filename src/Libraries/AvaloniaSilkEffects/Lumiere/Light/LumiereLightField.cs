@@ -1,5 +1,5 @@
 using System.Numerics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Lumiere.Light;
 
@@ -280,9 +280,8 @@ internal sealed class LumiereLightField : IDisposable
         }
         """;
 
-    private readonly GL _gl;
-    private readonly EffectShaderProgram _program;
-    private readonly uint _vao;
+    private readonly GpuDevice _gpu;
+    private readonly GpuShader _program;
     private readonly float[] _a = new float[LumiereLight.MaxBeams * 4];
     private readonly float[] _b = new float[LumiereLight.MaxBeams * 4];
     private readonly float[] _c = new float[LumiereLight.MaxBeams * 4];
@@ -290,18 +289,17 @@ internal sealed class LumiereLightField : IDisposable
     private readonly float[] _e = new float[LumiereLight.MaxBeams * 4];
     private readonly float[] _f = new float[LumiereLight.MaxBeams * 4];
 
-    public LumiereLightField(GL gl)
+    public LumiereLightField(GpuDevice gpu)
     {
-        _gl = gl;
-        _program = new EffectShaderProgram(gl, Vertex, Fragment, "lumiere-light-field");
-        _vao = gl.GenVertexArray();
+        _gpu = gpu;
+        _program = gpu.CreateShader(Vertex, Fragment, "lumiere-light-field");
     }
 
     /// <param name="transform">Stage logical pixels → target pixels.</param>
     /// <param name="viewport">Target size in pixels.</param>
     /// <param name="width">Logical frame width; with <paramref name="height"/> it defines the light field units.</param>
     /// <param name="margin">Logical pixels the quad extends past each edge, so camera moves never expose a seam.</param>
-    public unsafe void Render(LumiereLightFieldFrame frame, Matrix3x2 transform, Vector2 viewport,
+    public void Render(LumiereLightFieldFrame frame, Matrix3x2 transform, Vector2 viewport,
         float width, float height, float margin, float alpha = 1)
     {
         Array.Clear(_a);
@@ -324,70 +322,61 @@ internal sealed class LumiereLightField : IDisposable
             Set(_f, o, beam.Spectrum, beam.Reach, 0, 0);
         }
 
-        var gl = _gl;
-        _program.Use();
-        gl.Uniform4(_program.Uniform("uRect"), -margin, -margin, width + margin, height + margin);
-        var matrix = stackalloc float[9]
-        {
-            transform.M11, transform.M12, 0,
-            transform.M21, transform.M22, 0,
-            transform.M31, transform.M32, 1,
-        };
-        gl.UniformMatrix3(_program.Uniform("uTransform"), 1, false, matrix);
-        gl.Uniform2(_program.Uniform("uViewport"), viewport.X, viewport.Y);
-        gl.Uniform1(_program.Uniform("uAlpha"), alpha);
-        UploadArray("uBeamA[0]", _a);
-        UploadArray("uBeamB[0]", _b);
-        UploadArray("uBeamC[0]", _c);
-        UploadArray("uBeamD[0]", _d);
-        UploadArray("uBeamE[0]", _e);
-        UploadArray("uBeamF[0]", _f);
-        gl.Uniform4(_program.Uniform("uFrame"), width, height, (float)frame.Time, count);
+        var program = _program;
+        program.Set("uRect", -margin, -margin, width + margin, height + margin);
+        program.SetMatrix("uTransform", transform);
+        program.Set("uViewport", viewport.X, viewport.Y);
+        program.Set("uAlpha", alpha);
+        UploadArray("uBeamA", _a);
+        UploadArray("uBeamB", _b);
+        UploadArray("uBeamC", _c);
+        UploadArray("uBeamD", _d);
+        UploadArray("uBeamE", _e);
+        UploadArray("uBeamF", _f);
+        program.Set("uFrame", width, height, (float)frame.Time, count);
 
         var rig = frame.Rig;
         var fog = rig.Fog;
-        gl.Uniform4(_program.Uniform("uFogA"), (float)(fog.Density * frame.FogScale), (float)fog.TyndallBase,
+        program.Set("uFogA", (float)(fog.Density * frame.FogScale), (float)fog.TyndallBase,
             (float)fog.Scale, (float)fog.Warp);
-        gl.Uniform4(_program.Uniform("uFogB"), (float)fog.DriftX, (float)fog.DriftY,
+        program.Set("uFogB", (float)fog.DriftX, (float)fog.DriftY,
             (float)(fog.Ambient * frame.FogScale), (float)frame.Octaves);
-        gl.Uniform3(_program.Uniform("uFogColor"), frame.Color.X, frame.Color.Y, frame.Color.Z);
+        program.Set("uFogColor", frame.Color.X, frame.Color.Y, frame.Color.Z);
 
         var aspect = (double)width / height;
         var glare = rig.Glare;
-        gl.Uniform4(_program.Uniform("uGlare"),
+        program.Set("uGlare",
             glare is null ? 0 : (float)(glare.X * aspect),
             glare is null ? 0 : (float)glare.Y,
             glare is null ? 0 : (float)glare.Radius,
             glare is null ? 0 : (float)(glare.Intensity * frame.GlareScale));
-        gl.Uniform4(_program.Uniform("uGlareB"), glare is null ? 0 : (float)glare.Streak, 0, 0, 0);
-        gl.Uniform3(_program.Uniform("uGlareColor"), frame.Color.X, frame.Color.Y, frame.Color.Z);
-        gl.Uniform4(_program.Uniform("uDark"), frame.Dark.X, frame.Dark.Y, frame.Dark.Z, frame.Dark.W);
+        program.Set("uGlareB", glare is null ? 0 : (float)glare.Streak, 0, 0, 0);
+        program.Set("uGlareColor", frame.Color.X, frame.Color.Y, frame.Color.Z);
+        program.Set("uDark", frame.Dark.X, frame.Dark.Y, frame.Dark.Z, frame.Dark.W);
 
         var caustic = rig.Caustic;
         var floor = caustic?.Floor;
-        gl.Uniform4(_program.Uniform("uCaustic"), (float)(caustic?.Scale ?? 0), (float)(caustic?.Speed ?? 0),
+        program.Set("uCaustic", (float)(caustic?.Scale ?? 0), (float)(caustic?.Speed ?? 0),
             (float)(caustic?.InBeam ?? 0), caustic is null ? 0 : 1);
-        gl.Uniform4(_program.Uniform("uCausticFloor"), (float)((floor?.Cx ?? 0) * aspect), (float)(floor?.Cy ?? 0),
+        program.Set("uCausticFloor", (float)((floor?.Cx ?? 0) * aspect), (float)(floor?.Cy ?? 0),
             (float)((floor?.Rx ?? 0) * aspect), (float)(floor?.Ry ?? 0));
-        gl.Uniform4(_program.Uniform("uCausticB"), (float)((floor?.Strength ?? 0) * frame.GlareScale), 0, 0, 0);
+        program.Set("uCausticB", (float)((floor?.Strength ?? 0) * frame.GlareScale), 0, 0, 0);
 
         var wave = rig.Wave;
-        gl.Uniform4(_program.Uniform("uWave"), wave is null ? 0 : (int)wave.Mode, (float)(wave?.Frequency ?? 0),
+        program.Set("uWave", wave is null ? 0 : (int)wave.Mode, (float)(wave?.Frequency ?? 0),
             (float)(wave?.Speed ?? 0), (float)((wave?.Strength ?? 0) * frame.GlareScale));
-        gl.Uniform4(_program.Uniform("uWaveB"), (float)((wave?.Cx ?? 0) * aspect), (float)(wave?.Cy ?? 0),
+        program.Set("uWaveB", (float)((wave?.Cx ?? 0) * aspect), (float)(wave?.Cy ?? 0),
             (float)(wave?.Radius ?? 0), (float)(wave?.Separation ?? 0));
         var region = frame.TextRegion;
-        gl.Uniform4(_program.Uniform("uShield"),
+        program.Set("uShield",
             region is { } r0 ? (float)(r0.Cx * aspect) : 0,
             region is { } r1 ? (float)r1.Cy : 0,
             region is { } r2 ? (float)(r2.W * aspect / 2) : 1,
             region is { } r3 ? (float)(r3.H / 2) : 1);
-        gl.Uniform4(_program.Uniform("uShieldB"), region is not null && wave is not null ? (float)(wave.Shield ?? 0.45) : 0, 0, 0, 0);
+        program.Set("uShieldB", region is not null && wave is not null ? (float)(wave.Shield ?? 0.45) : 0, 0, 0, 0);
 
-        gl.Enable(EnableCap.Blend);
-        gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-        gl.BindVertexArray(_vao);
-        gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+        _gpu.SetBlend(GpuBlend.Alpha);
+        _gpu.Draw(program, GpuTopology.TriangleStrip, 4);
     }
 
     private static void Set(float[] target, int offset, double x, double y, double z, double w)
@@ -398,15 +387,7 @@ internal sealed class LumiereLightField : IDisposable
         target[offset + 3] = (float)w;
     }
 
-    private unsafe void UploadArray(string name, float[] values)
-    {
-        fixed (float* pointer = values)
-            _gl.Uniform4(_program.Uniform(name), LumiereLight.MaxBeams, pointer);
-    }
+    private void UploadArray(string name, float[] values) => _program.SetFloats(name, values, 4);
 
-    public void Dispose()
-    {
-        _program.Dispose();
-        _gl.DeleteVertexArray(_vao);
-    }
+    public void Dispose() => _program.Dispose();
 }

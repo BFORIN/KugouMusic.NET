@@ -2,7 +2,7 @@ using System.Numerics;
 using AvaloniaSilkEffects.Lumiere.Light;
 using AvaloniaSilkEffects.Lumiere.LineArt;
 using AvaloniaSilkEffects.Lumiere.Text;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Lumiere;
 
@@ -60,16 +60,23 @@ public sealed class LumiereUnitOptions
 }
 
 /// <summary>GPU objects shared by every unit of a scene.</summary>
-internal sealed class LumiereGpu(GL gl, EffectTextureCache textures) : IDisposable
+internal sealed class LumiereGpu(GpuDevice gpu, EffectTextureCache textures) : IDisposable
 {
-    public GL Gl { get; } = gl;
+    public GpuDevice Gpu { get; } = gpu;
     public EffectTextureCache Textures { get; } = textures;
-    public LumiereLightField LightField { get; } = new(gl);
-    public LumiereBloom GraphicsBloom { get; } = new(gl);
-    public LumiereBloom TextBloom { get; } = new(gl);
-    public LumiereSprites Sprites { get; } = new(gl);
-    public EffectColorTarget GraphicsTarget { get; } = new(gl);
-    public EffectColorTarget TextTarget { get; } = new(gl);
+    public LumiereLightField LightField { get; } = new(gpu);
+    public LumiereBloom GraphicsBloom { get; } = new(gpu);
+    public LumiereBloom TextBloom { get; } = new(gpu);
+    public LumiereSprites Sprites { get; } = new(gpu);
+    public GpuRenderTarget GraphicsTarget { get; } = gpu.CreateRenderTarget(depthStencil: false);
+    public GpuRenderTarget TextTarget { get; } = gpu.CreateRenderTarget(depthStencil: false);
+
+    /// <summary>Binds <paramref name="target"/> and clears it to transparent.</summary>
+    public void BindCleared(GpuRenderTarget target)
+    {
+        Gpu.SetTarget(target);
+        Gpu.Clear(EffectColor.Transparent);
+    }
 
     public void Dispose()
     {
@@ -173,13 +180,13 @@ internal sealed class LumiereUnit : IDisposable
         var keywords = LumiereKeywords.Prepare(options.Theme.WordColors, tuning.KeywordColors);
         // Background lyric echo: sung words collected into huge hollow fragments drifting down the main beam.
         if (tuning.Echo > 0 && !tuning.TextOnly && tuning.ShowText)
-            _echo = new LumiereEcho(gpu.Gl, options.Lines, width, height, options.Theme.FontFamily, options.Theme.FontWeight,
+            _echo = new LumiereEcho(gpu.Gpu, options.Lines, width, height, options.Theme.FontFamily, options.Theme.FontWeight,
                 resolution, options.Seed, _lead.EchoSize, tuning.Echo, keywords);
 
         _camera = new LumiereCamera(width, height, _lead.Camera, options.StartTime, options.EndTime, options.Sections,
             options.Theme.AnimationIntensity);
         // Text group: line i uses its shot's typography once current (lines outside any shot follow the previous shot).
-        _lyrics = new LumiereLyricWindow(gpu.Gl, new LumiereLyricWindowOptions
+        _lyrics = new LumiereLyricWindow(gpu.Gpu, new LumiereLyricWindowOptions
         {
             Textures = gpu.Textures,
             EnableTextPrewarm = options.EnableTextPrewarm,

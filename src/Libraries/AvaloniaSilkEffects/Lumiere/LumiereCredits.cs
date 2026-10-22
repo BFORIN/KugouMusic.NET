@@ -91,7 +91,7 @@ internal sealed class LumiereCredits : IDisposable
             var step = Math.Min(TitleStep, TitleSpan / Math.Max(glyphs.Count, 1));
             var line = new LumiereLine(title, TitleStart, TitleStart + step * glyphs.Count + 0.6,
                 [.. glyphs.Select((glyph, i) => new LumiereWord(glyph, TitleStart + i * step, TitleStart + (i + 1) * step))]);
-            _window = new LumiereLyricWindow(gpu.Gl, new LumiereLyricWindowOptions
+            _window = new LumiereLyricWindow(gpu.Gpu, new LumiereLyricWindowOptions
             {
                 Width = width,
                 Height = height,
@@ -115,10 +115,10 @@ internal sealed class LumiereCredits : IDisposable
             ? TitleStart + Math.Min(TitleSpan, TitleStep * LumiereReveal.Graphemes(title).Count) - 0.6
             : 0;
         if (artist.Length > 0)
-            _details.Add((new LumiereGlyphLine(gpu.Gl, artist.ToUpperInvariant(), detailSize, theme.FontFamily, theme.FontWeight, resolution, 0.32f),
+            _details.Add((new LumiereGlyphLine(gpu.Gpu, artist.ToUpperInvariant(), detailSize, theme.FontFamily, theme.FontWeight, resolution, 0.32f),
                 0.35f, _palette.Lit, 0.9 + titleDelay));
         if (album.Length > 0)
-            _details.Add((new LumiereGlyphLine(gpu.Gl, album, detailSize * 0.85f, theme.FontFamily, theme.FontWeight, resolution, 0.16f),
+            _details.Add((new LumiereGlyphLine(gpu.Gpu, album, detailSize * 0.85f, theme.FontFamily, theme.FontWeight, resolution, 0.16f),
                 0.65f, _palette.Unlit, 1.2 + titleDelay));
     }
 

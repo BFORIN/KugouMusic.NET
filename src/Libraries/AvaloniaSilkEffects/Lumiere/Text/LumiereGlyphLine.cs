@@ -1,6 +1,6 @@
 using System.Numerics;
 using System.Text.RegularExpressions;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 using SkiaSharp;
 
 namespace AvaloniaSilkEffects.Lumiere.Text;
@@ -35,11 +35,11 @@ internal sealed partial class LumiereGlyphLine : IDisposable
 
     public static bool IsUpright(string glyph) => UprightPattern().IsMatch(glyph);
 
-    public LumiereGlyphLine(GL gl, string text, float fontPx, string fontFamily, int weight, float resolution,
+    public LumiereGlyphLine(GpuDevice gpu, string text, float fontPx, string fontFamily, int weight, float resolution,
         float letterSpacing = 0, float outline = 0, int maxCanvasPx = 8192)
     {
-        using var timing = EffectGpuResources.For(gl).MeasureTextPreparation();
-        var measureTiming = EffectGpuResources.For(gl).MeasureTextStage(EffectTextStage.Measure);
+        using var timing = gpu.Resources.MeasureTextPreparation();
+        var measureTiming = gpu.Resources.MeasureTextStage(EffectTextStage.Measure);
         Text = text;
         FontPx = fontPx;
         var graphemes = LumiereReveal.Graphemes(text);
@@ -66,7 +66,7 @@ internal sealed partial class LumiereGlyphLine : IDisposable
         var canvasWidth = Math.Max(1, (int)MathF.Ceiling((width + pad * 2) * scale));
         var canvasHeight = Math.Max(1, (int)MathF.Ceiling((height + pad * 2) * scale));
         measureTiming.Dispose();
-        var rasterTiming = EffectGpuResources.For(gl).MeasureTextStage(EffectTextStage.Raster);
+        var rasterTiming = gpu.Resources.MeasureTextStage(EffectTextStage.Raster);
         using var bitmap = new SKBitmap(new SKImageInfo(canvasWidth, canvasHeight, SKColorType.Rgba8888, SKAlphaType.Premul));
         using (var canvas = new SKCanvas(bitmap))
         {
@@ -96,7 +96,7 @@ internal sealed partial class LumiereGlyphLine : IDisposable
             else for (var index = 0; index < graphemes.Count; index++) Draw(graphemes[index], pad + offsets[index]);
         }
         rasterTiming.Dispose();
-        Texture = Upload(gl, bitmap, new Vector2(width + pad * 2, height + pad * 2));
+        Texture = Upload(gpu, bitmap, new Vector2(width + pad * 2, height + pad * 2));
 
         var totalWidth = width + pad * 2;
         var totalHeight = height + pad * 2;
@@ -138,19 +138,11 @@ internal sealed partial class LumiereGlyphLine : IDisposable
     public EffectTexture Texture { get; }
     public IReadOnlyList<LumiereGlyphSlice> Glyphs { get; }
 
-    private static unsafe EffectTexture Upload(GL gl, SKBitmap bitmap, Vector2 logical)
+    private static unsafe EffectTexture Upload(GpuDevice gpu, SKBitmap bitmap, Vector2 logical)
     {
-        using var uploadTiming = EffectGpuResources.For(gl).MeasureTextStage(EffectTextStage.Upload);
-        var handle = gl.GenTexture();
-        gl.BindTexture(TextureTarget.Texture2D, handle);
-        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-        gl.PixelStore(PixelStoreParameter.UnpackAlignment, 4);
-        gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)bitmap.Width, (uint)bitmap.Height, 0,
-            PixelFormat.Rgba, PixelType.UnsignedByte, (void*)bitmap.GetPixels());
-        return new EffectTexture(gl, handle, bitmap.Width, bitmap.Height, logical);
+        using var uploadTiming = gpu.Resources.MeasureTextStage(EffectTextStage.Upload);
+        return EffectTexture.Upload(gpu, new ReadOnlySpan<byte>((void*)bitmap.GetPixels(), bitmap.ByteCount),
+            bitmap.Width, bitmap.Height, logical);
     }
 
     public void Dispose() => Texture.Dispose();

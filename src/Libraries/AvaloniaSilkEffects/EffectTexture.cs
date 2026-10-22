@@ -1,27 +1,31 @@
 using System.Numerics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects;
 
 public sealed class EffectTexture : IDisposable
 {
-    private readonly GL _gl;
+    private readonly EffectGpuResources _resources;
     private bool _disposed;
 
-    internal EffectTexture(GL gl, uint handle, int width, int height, Vector2 logicalSize, bool mipmaps = false)
+    internal EffectTexture(GpuDevice device, GpuTexture texture, Vector2 logicalSize)
     {
-        _gl = gl;
-        Handle = handle;
-        Width = width;
-        Height = height;
+        _resources = device.Resources;
+        Gpu = texture;
+        Width = texture.Width;
+        Height = texture.Height;
         LogicalSize = logicalSize;
-        var resources = EffectGpuResources.For(gl);
-        EstimatedBytes = EffectGpuResources.RgbaBytes(width, height, mipmaps);
-        resources.Texture(handle, EstimatedBytes);
-        resources.Uploaded((long)width * height * 4);
+        EstimatedBytes = EffectGpuResources.RgbaBytes(Width, Height, texture.Filter == GpuFilter.LinearMipmap);
+        _resources.Texture(texture.Id, EstimatedBytes);
+        _resources.Uploaded((long)Width * Height * 4);
     }
 
-    public uint Handle { get; }
+    /// <summary>Uploads tightly packed, premultiplied RGBA8 rows (top row first).</summary>
+    internal static EffectTexture Upload(GpuDevice device, ReadOnlySpan<byte> rgba, int width, int height,
+        Vector2 logicalSize, GpuFilter filter = GpuFilter.Linear) =>
+        new(device, device.CreateTexture(width, height, rgba, filter), logicalSize);
+
+    internal GpuTexture Gpu { get; }
     public int Width { get; }
     public int Height { get; }
     public Vector2 LogicalSize { get; }
@@ -32,7 +36,8 @@ public sealed class EffectTexture : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        EffectGpuResources.For(_gl).ReleaseTexture(Handle);
+        Gpu.Abandon();
+        _resources.ReleaseTexture(Gpu.Id);
     }
 
     public void Dispose()
@@ -40,8 +45,8 @@ public sealed class EffectTexture : IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        _gl.DeleteTexture(Handle);
-        EffectGpuResources.For(_gl).ReleaseTexture(Handle);
+        Gpu.Dispose();
+        _resources.ReleaseTexture(Gpu.Id);
     }
 }
 

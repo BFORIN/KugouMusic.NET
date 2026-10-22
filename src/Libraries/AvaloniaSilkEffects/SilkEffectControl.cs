@@ -1,15 +1,21 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Avalonia.OpenGL;
-using Avalonia.OpenGL.Controls;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
+using AvaloniaSilkEffects.Gpu.Presentation;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace AvaloniaSilkEffects;
+
+public sealed class EffectBackendSelectedEventArgs(EffectGpuBackend backend, string? fallbackReason) : EventArgs
+{
+    public EffectGpuBackend Backend { get; } = backend;
+    /// <summary>Why the preferred native backend was not used, when this is a fallback.</summary>
+    public string? FallbackReason { get; } = fallbackReason;
+}
 
 public sealed class EffectInitializationFailedEventArgs(string message, Exception? exception = null) : EventArgs
 {
@@ -17,8 +23,23 @@ public sealed class EffectInitializationFailedEventArgs(string message, Exceptio
     public Exception? Exception { get; } = exception;
 }
 
-public class SilkEffectControl : OpenGlControlBase
+/// <summary>
+/// Hosts an <see cref="IEffectScene"/>. Frames render with Metal (macOS) or Vulkan (Windows, Linux) when the
+/// compositor can import their images, and otherwise with OpenGL through Avalonia's <c>OpenGlControlBase</c>.
+/// </summary>
+public class SilkEffectControl : Control, IEffectPresenterHost
 {
+    /// <summary>
+    /// Which graphics API new controls try first; set before the first control attaches. Every choice falls
+    /// back to OpenGL. The environment variable <c>AVALONIA_SILK_EFFECTS_BACKEND</c> (auto, metal, vulkan, opengl)
+    /// provides the default.
+    /// </summary>
+    public static EffectGpuBackendPreference BackendPreference { get; set; } = ParsePreference(
+        Environment.GetEnvironmentVariable("AVALONIA_SILK_EFFECTS_BACKEND"));
+
+    /// <summary>Raised on the UI thread when a control settles on a backend (including after a fallback).</summary>
+    public static event EventHandler<EffectBackendSelectedEventArgs>? BackendSelected;
+
     public static readonly StyledProperty<IEffectScene?> SceneProperty =
         AvaloniaProperty.Register<SilkEffectControl, IEffectScene?>(nameof(Scene));
 
@@ -51,8 +72,10 @@ public class SilkEffectControl : OpenGlControlBase
     private readonly EffectFramePacer _pacer = new();
     private readonly Stopwatch _renderStopwatch = Stopwatch.StartNew();
     private IDisposable? _nextFrameRequest;
-    private GL? _gl;
     private EffectDevice? _device;
+    private IEffectPresenter? _presenter;
+    private bool _presenterPending;
+    private bool _nativeFailed;
     private IEffectScene? _activeScene;
     private PixelSize _lastPixelSize;
     private double _lastRenderScaling;
@@ -65,6 +88,11 @@ public class SilkEffectControl : OpenGlControlBase
     // Includes ancestor visibility and the native window state. IsVisible alone
     // stays true on children when a window is hidden to the tray.
     protected bool IsRenderingActive { get; private set; }
+
+    bool IEffectPresenterHost.IsRenderingActive => IsRenderingActive;
+
+    /// <summary>The graphics API frames are rendered with, once a presenter is ready.</summary>
+    public EffectGpuBackend? ActiveBackend => _presenter?.Backend;
 
     public IEffectScene? Scene
     {
@@ -132,10 +160,16 @@ public class SilkEffectControl : OpenGlControlBase
 
     public SilkEffectControl()
     {
-        // The GL surface is sized to this control by OpenGlControlBase. Keep the
-        // Avalonia composition visual clipped to the same arranged bounds.
+        // The GPU surface is sized to this control. Keep the Avalonia composition
+        // visual clipped to the same arranged bounds.
         ClipToBounds = true;
     }
+
+    private static EffectGpuBackendPreference ParsePreference(string? value) =>
+        Enum.TryParse<EffectGpuBackendPreference>(value?.Replace("gl", "Gl", StringComparison.OrdinalIgnoreCase),
+            ignoreCase: true, out var preference) ? preference : EffectGpuBackendPreference.Auto;
+
+    private void RequestNextFrameRendering() => _presenter?.RequestFrame();
 
     public void Seek(TimeSpan elapsed)
     {
@@ -154,6 +188,9 @@ public class SilkEffectControl : OpenGlControlBase
         base.OnPropertyChanged(change);
         if (change.Property == IsVisibleProperty)
             UpdateRenderingActivity();
+        // OpenGlControlBase redraws on resize by itself; a composition surface needs a frame at the new size.
+        if (change.Property == BoundsProperty && _presenter is { Child: null })
+            RenderOnce();
         if (change.Property == IsPausedProperty)
             _clock.SetPaused(IsPaused);
         if (change.Property == TargetFrameRateProperty || change.Property == IsPausedProperty ||
@@ -172,50 +209,24 @@ public class SilkEffectControl : OpenGlControlBase
             RenderOnce();
     }
 
-    protected override void OnOpenGlInit(GlInterface avaloniaGl)
-    {
-        if (IsRenderingActive)
-            InitializeDevice(avaloniaGl);
-    }
-
-    [MemberNotNull(nameof(_device), nameof(_gl))]
-    private void InitializeDevice(GlInterface avaloniaGl)
-    {
-        try
-        {
-            _gl = GL.GetApi(avaloniaGl.GetProcAddress);
-            _device = new EffectDevice(_gl);
-            SetError(null);
-        }
-        catch (Exception exception)
-        {
-            SetError($"OpenGL initialization failed: {exception.Message}", exception);
-            _device?.Dispose();
-            _device = null;
-            _gl?.Dispose();
-            _gl = null;
-            throw;
-        }
-    }
-
-    protected override void OnOpenGlRender(GlInterface avaloniaGl, int framebuffer)
+    bool IEffectPresenterHost.RenderFrame(GpuDevice gpu, Func<PixelSize, GpuRenderTarget?> acquire)
     {
         CancelNextFrameRequest();
         if (!IsRenderingActive)
         {
-            // Visibility notifications do not make the GL context current.
-            // Use one final callback for cleanup, without updating the scene.
-            ReleaseDevice();
-            return;
+            ReleaseDeviceResources();
+            return false;
         }
         var prepareStarted = Stopwatch.GetTimestamp();
         var prepareAllocated = GC.GetAllocatedBytesForCurrentThread();
+        if (_device is not null && !ReferenceEquals(_device.Gpu, gpu))
+            ReleaseDeviceResources();
         if (_device is null)
-            InitializeDevice(avaloniaGl);
+            InitializeDevice(gpu);
 
         SwapSceneIfNeeded();
         if (_activeScene is null)
-            return;
+            return false;
 
         var dpiScaling = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
         var pixelSize = new PixelSize(
@@ -231,10 +242,16 @@ public class SilkEffectControl : OpenGlControlBase
         }
 
         var presentationTimestamp = _renderStopwatch.Elapsed;
-        // BeginDraw has already acquired a compositor surface. It may be a different
-        // swapchain image from the last callback, so skipping here can present stale
-        // contents. Always draw this frame; apply the cap to the next request instead.
+        // The presenter has already acquired (or is about to acquire) a compositor surface. It may be a different
+        // swapchain image from the last callback, so skipping here can present stale contents. Always draw this
+        // frame; apply the cap to the next request instead.
         _pacer.ShouldPresent(presentationTimestamp, TargetFrameRate);
+        var output = acquire(pixelSize);
+        if (output is null)
+        {
+            RenderOnce();
+            return false;
+        }
 
         var (elapsed, delta, frameNumber) = _clock.Step();
         var frame = new EffectFrame(elapsed, delta, pixelSize, scaling, frameNumber);
@@ -242,7 +259,7 @@ public class SilkEffectControl : OpenGlControlBase
         var prepareBytes = GC.GetAllocatedBytesForCurrentThread() - prepareAllocated;
         var interval = _lastPresentationTimestamp == default || IsPaused
             ? 0 : (presentationTimestamp - _lastPresentationTimestamp).TotalMilliseconds;
-        _device.Render(_activeScene, frame, framebuffer, EffectColor.FromAvalonia(ClearColor),
+        _device.Render(_activeScene, frame, output, EffectColor.FromAvalonia(ClearColor),
             prepareMilliseconds, prepareBytes);
         _submittedFrames++;
         _lastPresentationTimestamp = presentationTimestamp;
@@ -265,6 +282,24 @@ public class SilkEffectControl : OpenGlControlBase
 
         if (IsRenderingActive && !IsPaused && RenderMode == EffectRenderMode.Continuous)
             ScheduleNextFrameRequest();
+        return true;
+    }
+
+    [MemberNotNull(nameof(_device))]
+    private void InitializeDevice(GpuDevice gpu)
+    {
+        try
+        {
+            _device = new EffectDevice(gpu, ownsGpu: false);
+            SetError(null);
+        }
+        catch (Exception exception)
+        {
+            SetError($"{gpu.Backend} initialization failed: {exception.Message}", exception);
+            _device?.Dispose();
+            _device = null;
+            throw;
+        }
     }
 
     private void ScheduleNextFrameRequest()
@@ -300,6 +335,76 @@ public class SilkEffectControl : OpenGlControlBase
         }
         UpdateRenderingActivity();
         base.OnAttachedToVisualTree(e);
+        if (_presenter is null && !_presenterPending)
+            _ = CreatePresenterAsync();
+    }
+
+    private async Task CreatePresenterAsync()
+    {
+        _presenterPending = true;
+        try
+        {
+            string? reason = null;
+            var preference = BackendPreference;
+            if (!_nativeFailed && EffectPresenterFactory.Native(preference) is { } backend)
+            {
+                (var presenter, reason) = await EffectPresenterFactory.TryCreateNativeAsync(this, this, backend);
+                if (!_isAttached)
+                {
+                    presenter?.Dispose();
+                    return;
+                }
+                if (presenter is not null)
+                {
+                    Use(presenter, null);
+                    return;
+                }
+                reason = $"{backend} unavailable: {reason}";
+            }
+            if (_isAttached) Use(new GlEffectPresenter(this), reason);
+        }
+        finally
+        {
+            _presenterPending = false;
+        }
+    }
+
+    private void Use(IEffectPresenter presenter, string? fallbackReason)
+    {
+        _presenter = presenter;
+        if (presenter.Child is { } child)
+        {
+            VisualChildren.Add(child);
+            LogicalChildren.Add(child);
+            InvalidateMeasure();
+        }
+        BackendSelected?.Invoke(this, new EffectBackendSelectedEventArgs(presenter.Backend, fallbackReason));
+        _lastPixelSize = default;
+        RenderOnce();
+    }
+
+    void IEffectPresenterHost.PresenterFailed(IEffectPresenter presenter, Exception exception)
+    {
+        if (!ReferenceEquals(presenter, _presenter)) return;
+        SetError($"{presenter.Backend} rendering failed, falling back to OpenGL: {exception.Message}", exception);
+        _presenter = null;
+        try { presenter.Dispose(); }
+        catch { /* the device is already broken */ AbandonDeviceResources(null); }
+        if (presenter is GlEffectPresenter) return;
+        _nativeFailed = true;
+        if (_isAttached) Use(new GlEffectPresenter(this), exception.Message);
+    }
+
+    protected override Size MeasureOverride(Size availableSize)
+    {
+        _presenter?.Child?.Measure(availableSize);
+        return default;
+    }
+
+    protected override Size ArrangeOverride(Size finalSize)
+    {
+        _presenter?.Child?.Arrange(new Rect(finalSize));
+        return finalSize;
     }
 
     private void OnAncestorPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -338,43 +443,40 @@ public class SilkEffectControl : OpenGlControlBase
         UpdateRenderingActivity();
         CancelNextFrameRequest();
         _pacer.Reset();
+        // A native presenter's swapchain belongs to this compositor; OpenGL cleans up when its surface deinitializes.
+        if (_presenter is { Child: null } native)
+        {
+            _presenter = null;
+            native.Dispose();
+        }
         base.OnDetachedFromVisualTree(e);
     }
 
-    protected override void OnOpenGlDeinit(GlInterface avaloniaGl)
-    {
-        CancelNextFrameRequest();
-        ReleaseDevice();
-        _pacer.Reset();
-    }
+    void IEffectPresenterHost.ReleaseDeviceResources() => ReleaseDeviceResources();
 
-    private void ReleaseDevice()
+    /// <summary>Releases the scene's and the device's objects; the presenter keeps its GPU device.</summary>
+    private void ReleaseDeviceResources()
     {
         var scene = _activeScene;
         var device = _device;
-        var gl = _gl;
         _activeScene = null;
         _device = null;
-        _gl = null;
         _lastPixelSize = default;
         _lastRenderScaling = 0;
         try { scene?.DisposeGpuResources(); }
-        finally
-        {
-            try { device?.Dispose(); }
-            finally { gl?.Dispose(); }
-        }
+        finally { device?.Dispose(); }
     }
 
-    protected override void OnOpenGlLost()
+    void IEffectPresenterHost.AbandonDeviceResources(string reason) => AbandonDeviceResources(reason);
+
+    private void AbandonDeviceResources(string? reason)
     {
         CancelNextFrameRequest();
         _device?.Abandon();
         _activeScene = null;
         _device = null;
-        _gl = null;
         _pacer.Reset();
-        SetError("The OpenGL context was lost. Avalonia will recreate the effect resources.");
+        if (reason is not null) SetError(reason);
     }
 
     private void SwapSceneIfNeeded()

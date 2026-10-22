@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using SkiaSharp;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects;
 
@@ -9,7 +9,7 @@ public sealed class EffectTextureCache : IDisposable
 {
     private const int CollectIntervalFrames = 32;
 
-    private readonly GL _gl;
+    private readonly GpuDevice _device;
     private readonly Dictionary<TextTextureKey, EffectTexture> _textTextures = [];
     private readonly Dictionary<LayeredTextTextureKey, EffectTexture> _layeredTextTextures = [];
     private readonly Dictionary<VectorTextureKey, EffectTexture> _vectorTextures = [];
@@ -39,11 +39,13 @@ public sealed class EffectTextureCache : IDisposable
         "Droid Sans Fallback"
     ];
 
-    internal EffectTextureCache(GL gl) => _gl = gl;
+    internal EffectTextureCache(GpuDevice device) => _device = device;
 
-    internal EffectGpuResources TextResources => EffectGpuResources.For(_gl);
+    internal GpuDevice Device => _device;
 
-    internal EffectGpuResources.TimingScope MeasureTextPreparation() => EffectGpuResources.For(_gl).MeasureTextPreparation();
+    internal EffectGpuResources TextResources => _device.Resources;
+
+    internal EffectGpuResources.TimingScope MeasureTextPreparation() => _device.Resources.MeasureTextPreparation();
 
     public int Count => _ownedTextures.Count;
     public long ResidentBytes => _residentBytes;
@@ -199,27 +201,7 @@ public sealed class EffectTextureCache : IDisposable
         if (rgba.Length != width * height * 4)
             throw new ArgumentException("RGBA data length does not match the texture dimensions.", nameof(rgba));
 
-        var handle = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, handle);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-        fixed (byte* pixels = rgba)
-        {
-            _gl.TexImage2D(
-                TextureTarget.Texture2D,
-                0,
-                InternalFormat.Rgba8,
-                (uint)width,
-                (uint)height,
-                0,
-                PixelFormat.Rgba,
-                PixelType.UnsignedByte,
-                pixels);
-        }
-
-        var texture = new EffectTexture(_gl, handle, width, height, logicalSize ?? new Vector2(width, height));
+        var texture = EffectTexture.Upload(_device, rgba, width, height, logicalSize ?? new Vector2(width, height));
         Register(texture);
         return texture;
     }
@@ -300,23 +282,8 @@ public sealed class EffectTextureCache : IDisposable
         canvas.DrawText(key.Text, padding, y, font, paint);
         canvas.Flush();
 
-        var handle = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, handle);
-        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.LinearMipmapLinear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)width, (uint)height, 0,
-            PixelFormat.Rgba, PixelType.UnsignedByte, bitmap.GetPixels().ToPointer());
-        _gl.GenerateMipmap(TextureTarget.Texture2D);
-
-        return new EffectTexture(
-            _gl,
-            handle,
-            width,
-            height,
-            new Vector2(width / key.RasterScale, height / key.RasterScale), mipmaps: true);
+        return EffectTexture.Upload(_device, new ReadOnlySpan<byte>(bitmap.GetPixels().ToPointer(), bitmap.ByteCount),
+            width, height, new Vector2(width / key.RasterScale, height / key.RasterScale), GpuFilter.LinearMipmap);
     }
 
     private unsafe EffectTexture RasterizeTextLayer(LayeredTextTextureKey key)
@@ -359,23 +326,8 @@ public sealed class EffectTextureCache : IDisposable
         canvas.DrawText(key.Text, padding, y, font, paint);
         canvas.Flush();
 
-        var handle = _gl.GenTexture();
-        _gl.BindTexture(TextureTarget.Texture2D, handle);
-        _gl.PixelStore(PixelStoreParameter.UnpackAlignment, 1);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.LinearMipmapLinear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)width, (uint)height, 0,
-            PixelFormat.Rgba, PixelType.UnsignedByte, bitmap.GetPixels().ToPointer());
-        _gl.GenerateMipmap(TextureTarget.Texture2D);
-
-        return new EffectTexture(
-            _gl,
-            handle,
-            width,
-            height,
-            new Vector2(width / key.RasterScale, height / key.RasterScale), mipmaps: true);
+        return EffectTexture.Upload(_device, new ReadOnlySpan<byte>(bitmap.GetPixels().ToPointer(), bitmap.ByteCount),
+            width, height, new Vector2(width / key.RasterScale, height / key.RasterScale), GpuFilter.LinearMipmap);
     }
 
     private static SKColor ToSkColor(EffectColor color) => new(
@@ -411,7 +363,7 @@ public sealed class EffectTextureCache : IDisposable
 
     private bool IsOverLimit => _ownedTextures.Count > ResidentTextureLimit || _residentBytes > ResidentByteLimit;
 
-    /// <summary>Releases a cached texture. Call only inside the owning GL lifecycle.</summary>
+    /// <summary>Releases a cached texture. Call only inside the owning device lifecycle.</summary>
     public void Release(EffectTexture texture) => Remove(texture);
 
     private void Remove(EffectTexture texture)

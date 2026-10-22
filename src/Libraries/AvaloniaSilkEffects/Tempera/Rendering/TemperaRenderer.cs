@@ -1,6 +1,6 @@
 using System.Numerics;
 using System.Diagnostics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 using AvaloniaSilkEffects.Tempera.Text;
 
 namespace AvaloniaSilkEffects.Tempera.Rendering;
@@ -26,59 +26,46 @@ internal readonly record struct TemperaPass(TemperaPassKind Kind, float Amount, 
 /// </summary>
 internal sealed class TemperaRenderer : IDisposable
 {
-    private readonly GL _gl;
+    private static readonly GpuVertexLayout QuadLayout = new(2 * sizeof(float), new GpuVertexAttribute(0, 2, 0));
+
+    private readonly GpuDevice _gpu;
     private readonly EffectPrimitiveRenderer _primitives;
     private readonly EffectTextureCache _textures;
     private readonly TemperaGlyphCache _glyphs;
     private readonly Stack<TemperaNode> _warmup = new();
     private TemperaGroup? _warmupRoot;
     private float _warmupScale;
-    private readonly EffectShaderProgram _mesh;
-    private readonly EffectShaderProgram _invert;
-    private readonly Dictionary<TemperaPassKind, EffectShaderProgram> _passes = [];
-    private readonly EffectShaderProgram _copy;
-    private readonly uint _quadVao;
-    private readonly uint _quadVbo;
-    private readonly EffectColorTarget _text;
-    private readonly EffectColorTarget _ping;
-    private readonly EffectColorTarget _pong;
+    private readonly GpuShader _mesh;
+    private readonly GpuShader _invert;
+    private readonly Dictionary<TemperaPassKind, GpuShader> _passes = [];
+    private readonly GpuShader _copy;
+    private readonly GpuBuffer _quad;
+    private readonly GpuRenderTarget _text;
+    private readonly GpuRenderTarget _ping;
+    private readonly GpuRenderTarget _pong;
     private readonly Vector3[] _stops = new Vector3[4];
 
-    public TemperaRenderer(GL gl, EffectPrimitiveRenderer primitives, EffectTextureCache textures)
+    public TemperaRenderer(GpuDevice gpu, EffectPrimitiveRenderer primitives, EffectTextureCache textures)
     {
-        _gl = gl;
+        _gpu = gpu;
         _primitives = primitives;
         _textures = textures;
         _glyphs = new TemperaGlyphCache(textures);
-        _mesh = new EffectShaderProgram(gl, TemperaShaders.MeshVertex, TemperaShaders.MeshFragment, "tempera-mesh");
-        _invert = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.InvertFragment, "tempera-difference");
-        _copy = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.CopyFragment, "tempera-copy");
-        _passes[TemperaPassKind.Lens] = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.LensFragment, "tempera-lens");
-        _passes[TemperaPassKind.Noise] = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.NoiseFragment, "tempera-noise");
-        _passes[TemperaPassKind.Contrast] = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.ContrastFragment, "tempera-contrast");
-        _passes[TemperaPassKind.RgbShift] = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.RgbShiftFragment, "tempera-rgb-shift");
-        _passes[TemperaPassKind.Vignette] = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.VignetteFragment, "tempera-vignette");
-        var blur = new EffectShaderProgram(gl, TemperaShaders.PassVertex, TemperaShaders.BlurFragment, "tempera-blur");
+        _mesh = gpu.CreateShader(TemperaShaders.MeshVertex, TemperaShaders.MeshFragment, "tempera-mesh");
+        _invert = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.InvertFragment, "tempera-difference");
+        _copy = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.CopyFragment, "tempera-copy");
+        _passes[TemperaPassKind.Lens] = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.LensFragment, "tempera-lens");
+        _passes[TemperaPassKind.Noise] = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.NoiseFragment, "tempera-noise");
+        _passes[TemperaPassKind.Contrast] = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.ContrastFragment, "tempera-contrast");
+        _passes[TemperaPassKind.RgbShift] = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.RgbShiftFragment, "tempera-rgb-shift");
+        _passes[TemperaPassKind.Vignette] = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.VignetteFragment, "tempera-vignette");
+        var blur = gpu.CreateShader(TemperaShaders.PassVertex, TemperaShaders.BlurFragment, "tempera-blur");
         _passes[TemperaPassKind.BlurX] = blur;
         _passes[TemperaPassKind.BlurY] = blur;
-        _text = new EffectColorTarget(gl);
-        _ping = new EffectColorTarget(gl);
-        _pong = new EffectColorTarget(gl);
-        unsafe
-        {
-            _quadVao = gl.GenVertexArray();
-            _quadVbo = gl.GenBuffer();
-            gl.BindVertexArray(_quadVao);
-            gl.BindBuffer(BufferTargetARB.ArrayBuffer, _quadVbo);
-            float[] quad = [0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1];
-            fixed (float* data = quad)
-                gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(quad.Length * sizeof(float)), data, BufferUsageARB.StaticDraw);
-            gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 2 * sizeof(float), (void*)0);
-            gl.EnableVertexAttribArray(0);
-            gl.BindVertexArray(0);
-            EffectGpuResources.For(gl).Buffer(_quadVbo, quad.Length * sizeof(float));
-            EffectGpuResources.For(gl).Uploaded(quad.Length * sizeof(float));
-        }
+        _text = gpu.CreateRenderTarget(depthStencil: false);
+        _ping = gpu.CreateRenderTarget(depthStencil: false);
+        _pong = gpu.CreateRenderTarget(depthStencil: false);
+        _quad = gpu.CreateBuffer<float>([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1]);
     }
 
     public int DrawCalls { get; private set; }
@@ -123,45 +110,33 @@ internal sealed class TemperaRenderer : IDisposable
         _primitives.Flush();
         if (graphic.Buffer is null)
         {
-            graphic.Buffer = new TemperaMeshBuffer(_gl);
+            graphic.Buffer = new TemperaMeshBuffer(_gpu);
             graphic.Buffer.Upload(graphic);
         }
-        _mesh.Use();
-        Span<float> matrix = [world.M11, world.M12, 0, world.M21, world.M22, 0, world.M31, world.M32, 1];
-        _gl.UniformMatrix3(_mesh.Uniform("uMatrix"), 1, false, matrix);
-        _gl.Uniform2(_mesh.Uniform("uViewport"), (float)width, height);
-        _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-        _gl.BindVertexArray(graphic.Buffer.Vao);
+        _mesh.SetMatrix("uMatrix", world);
+        _mesh.Set("uViewport", (float)width, height);
+        _gpu.SetBlend(GpuBlend.Alpha);
         foreach (var part in graphic.Parts)
         {
             if (part.Indices.Length == 0) continue;
             var a = part.Alpha * alpha;
             if (part.Stops is { } stops)
             {
-                _gl.Uniform1(_mesh.Uniform("uGradient"), 1);
+                _mesh.Set("uGradient", 1);
                 for (var index = 0; index < 4; index++) _stops[index] = stops[index];
-                unsafe
-                {
-                    fixed (Vector3* data = _stops)
-                        _gl.Uniform3(_mesh.Uniform("uStops"), 4, (float*)data);
-                }
-                _gl.Uniform1(_mesh.Uniform("uAlpha"), a);
+                _mesh.Set("uStops", _stops);
+                _mesh.Set("uAlpha", a);
             }
             else
             {
-                _gl.Uniform1(_mesh.Uniform("uGradient"), 0);
+                _mesh.Set("uGradient", 0);
                 var rgb = part.Color.ToVector3() * a;
-                _gl.Uniform4(_mesh.Uniform("uColor"), rgb.X, rgb.Y, rgb.Z, a);
+                _mesh.Set("uColor", rgb.X, rgb.Y, rgb.Z, a);
             }
-            unsafe
-            {
-                _gl.DrawElements(PrimitiveType.Triangles, (uint)part.Indices.Length, DrawElementsType.UnsignedInt,
-                    (void*)(part.IndexOffset * sizeof(uint)));
-            }
+            _gpu.DrawIndexed(_mesh, TemperaMeshBuffer.Layout, graphic.Buffer.Vertices!, graphic.Buffer.Indices!,
+                part.IndexOffset, part.Indices.Length);
             DrawCalls++;
         }
-        _gl.BindVertexArray(0);
     }
 
     private void DrawText(TemperaText text, Matrix3x2 world, float alpha, float rasterScale)
@@ -268,62 +243,48 @@ internal sealed class TemperaRenderer : IDisposable
         if (bounds.IsEmpty) return;
 
         _primitives.Flush();
-        var back = layer.Inversion ? surface.Resolve() : 0u;
+        var back = layer.Inversion ? surface.Resolve() : null;
 
         _text.EnsureSize(surface.Width, surface.Height);
-        _text.Bind();
+        _gpu.SetTarget(_text);
         var glBounds = bounds.ToGl(surface.Height);
-        _gl.Enable(EnableCap.ScissorTest);
-        _gl.Scissor((int)glBounds.X, (int)glBounds.Y, (uint)glBounds.Z, (uint)glBounds.W);
-        _gl.ClearColor(0, 0, 0, 0);
-        _gl.Clear(ClearBufferMask.ColorBufferBit);
+        _gpu.SetScissor(bounds.ToGpu(surface.Height));
+        _gpu.Clear(EffectColor.Transparent);
         foreach (var child in layer.Children) DrawNode(child, surface, world, alpha);
         _primitives.Flush();
-        _gl.Disable(EnableCap.ScissorTest);
+        _gpu.SetScissor(null);
 
         surface.Bind();
-        _invert.Use();
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _text.Texture);
-        _gl.Uniform1(_invert.Uniform("uText"), 0);
-        _gl.ActiveTexture(TextureUnit.Texture1);
-        _gl.BindTexture(TextureTarget.Texture2D, back);
-        _gl.Uniform1(_invert.Uniform("uBack"), 1);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.Uniform2(_invert.Uniform("uSize"), (float)surface.Width, surface.Height);
-        _gl.Uniform2(_invert.Uniform("uOutSize"), (float)surface.Width, surface.Height);
-        _gl.Uniform4(_invert.Uniform("uOutFrame"), glBounds);
-        _gl.Uniform1(_invert.Uniform("uPixelScale"), surface.Scale);
+        var invert = _invert;
+        invert.SetTexture("uText", _text.Texture);
+        invert.SetTexture("uBack", back);
+        invert.Set("uSize", (float)surface.Width, surface.Height);
+        invert.Set("uOutSize", (float)surface.Width, surface.Height);
+        invert.Set("uOutFrame", glBounds);
+        invert.Set("uPixelScale", surface.Scale);
         var ink = layer.Ink.ToVector3();
         var paper = layer.Paper.ToVector3();
-        _gl.Uniform3(_invert.Uniform("uInkColor"), ink);
-        _gl.Uniform3(_invert.Uniform("uPaperColor"), paper);
-        _gl.Uniform1(_invert.Uniform("uInkLuminance"), Luminance(ink));
-        _gl.Uniform1(_invert.Uniform("uPaperLuminance"), Luminance(paper));
-        _gl.Uniform1(_invert.Uniform("uBias"), 0f);
+        invert.Set("uInkColor", ink);
+        invert.Set("uPaperColor", paper);
+        invert.Set("uInkLuminance", Luminance(ink));
+        invert.Set("uPaperLuminance", Luminance(paper));
+        invert.Set("uBias", 0f);
         var tint = layer.Tint is { Length: >= 2 } stops ? stops : null;
         for (var index = 0; index < 4; index++)
             _stops[index] = tint is null ? ink : tint[Math.Min(index, tint.Length - 1)].ToVector3();
-        unsafe
-        {
-            fixed (Vector3* data = _stops)
-                _gl.Uniform3(_invert.Uniform("uTint"), 4, (float*)data);
-        }
-        _gl.Uniform1(_invert.Uniform("uTintAmount"), tint is null ? 0f : 1f);
-        _gl.Uniform1(_invert.Uniform("uInversion"), layer.Inversion ? 1 : 0);
-        _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-        DrawQuad();
+        invert.Set("uTint", _stops);
+        invert.Set("uTintAmount", tint is null ? 0f : 1f);
+        invert.Set("uInversion", layer.Inversion ? 1 : 0);
+        _gpu.SetBlend(GpuBlend.Alpha);
+        DrawQuad(invert);
         _primitives.SetViewport(new Vector2(surface.Width, surface.Height));
     }
 
     private static float Luminance(Vector3 rgb) => rgb.X * 0.2126f + rgb.Y * 0.7152f + rgb.Z * 0.0722f;
 
-    private void DrawQuad()
+    private void DrawQuad(GpuShader shader)
     {
-        _gl.BindVertexArray(_quadVao);
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
-        _gl.BindVertexArray(0);
+        _gpu.Draw(shader, QuadLayout, _quad, 0, 6);
         DrawCalls++;
     }
 
@@ -336,7 +297,7 @@ internal sealed class TemperaRenderer : IDisposable
     public void RunChain(TemperaSurface source, TemperaPixelRect frame, IReadOnlyList<TemperaPass> passes, TemperaSurface target)
     {
         _primitives.Flush();
-        using var timing = EffectGpuResources.For(_gl).MeasurePostProcess();
+        using var timing = _gpu.Resources.MeasurePostProcess();
         var input = source.Resolve();
         var inputWidth = source.Width;
         var inputHeight = source.Height;
@@ -355,83 +316,73 @@ internal sealed class TemperaRenderer : IDisposable
                 outFrame = outputRect.ToGl(target.Height);
                 outWidth = target.Width;
                 outHeight = target.Height;
-                _gl.Enable(EnableCap.Blend);
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
+                _gpu.SetBlend(GpuBlend.Alpha);
             }
             else
             {
                 flip.EnsureSize(inputWidth, inputHeight);
-                flip.Bind();
+                _gpu.SetTarget(flip);
                 outFrame = inputFrame;
                 outWidth = inputWidth;
                 outHeight = inputHeight;
-                _gl.Disable(EnableCap.Blend);
-                _gl.Enable(EnableCap.ScissorTest);
-                _gl.Scissor((int)inputFrame.X, (int)inputFrame.Y, (uint)inputFrame.Z, (uint)inputFrame.W);
-                _gl.ClearColor(0, 0, 0, 0);
-                _gl.Clear(ClearBufferMask.ColorBufferBit);
-                _gl.Disable(EnableCap.ScissorTest);
+                _gpu.SetBlend(GpuBlend.None);
+                _gpu.SetScissor(frame.ToGpu(source.Height));
+                _gpu.Clear(EffectColor.Transparent);
+                _gpu.SetScissor(null);
             }
             var pass = passes[index];
             var shader = pass.Amount == 0 && pass.Kind == TemperaPassKind.Lens ? _copy : _passes[pass.Kind];
-            shader.Use();
-            _gl.ActiveTexture(TextureUnit.Texture0);
-            _gl.BindTexture(TextureTarget.Texture2D, input);
-            _gl.Uniform1(shader.Uniform("uTexture"), 0);
-            _gl.Uniform2(shader.Uniform("uInputSize"), (float)inputWidth, inputHeight);
-            _gl.Uniform4(shader.Uniform("uFrame"), inputFrame);
-            _gl.Uniform4(shader.Uniform("uOutFrame"), outFrame);
-            _gl.Uniform2(shader.Uniform("uOutSize"), (float)outWidth, outHeight);
-            _gl.Uniform1(shader.Uniform("uPixelScale"), source.Scale);
+            shader.SetTexture("uTexture", input);
+            shader.Set("uInputSize", (float)inputWidth, inputHeight);
+            shader.Set("uFrame", inputFrame);
+            shader.Set("uOutFrame", outFrame);
+            shader.Set("uOutSize", (float)outWidth, outHeight);
+            shader.Set("uPixelScale", source.Scale);
             switch (pass.Kind)
             {
                 case TemperaPassKind.Lens:
-                    _gl.Uniform1(shader.Uniform("uDistortion"), pass.Amount);
-                    _gl.Uniform1(shader.Uniform("uDispersion"), 0f);
+                    shader.Set("uDistortion", pass.Amount);
+                    shader.Set("uDispersion", 0f);
                     break;
                 case TemperaPassKind.Noise:
-                    _gl.Uniform1(shader.Uniform("uNoise"), pass.Amount);
-                    _gl.Uniform1(shader.Uniform("uSeed"), pass.Seed);
+                    shader.Set("uNoise", pass.Amount);
+                    shader.Set("uSeed", pass.Seed);
                     break;
                 case TemperaPassKind.Contrast:
-                    _gl.Uniform1(shader.Uniform("uContrast"), pass.Amount);
+                    shader.Set("uContrast", pass.Amount);
                     break;
                 case TemperaPassKind.RgbShift:
                 case TemperaPassKind.Vignette:
-                    _gl.Uniform1(shader.Uniform("uAmount"), pass.Amount);
+                    shader.Set("uAmount", pass.Amount);
                     break;
                 case TemperaPassKind.BlurX:
                 case TemperaPassKind.BlurY:
-                    _gl.Uniform2(shader.Uniform("uDirection"), pass.Kind == TemperaPassKind.BlurX ? 1f : 0f,
+                    shader.Set("uDirection", pass.Kind == TemperaPassKind.BlurX ? 1f : 0f,
                         pass.Kind == TemperaPassKind.BlurY ? 1f : 0f);
-                    _gl.Uniform1(shader.Uniform("uStrength"), pass.Amount);
+                    shader.Set("uStrength", pass.Amount);
                     break;
             }
-            DrawQuad();
+            DrawQuad(shader);
             if (!last)
             {
-                input = flip.Texture;
+                input = flip.Texture!;
                 flip = flip == _ping ? _pong : _ping;
             }
         }
-        _gl.Enable(EnableCap.Blend);
+        _gpu.SetBlend(GpuBlend.Alpha);
         _primitives.SetViewport(new Vector2(target.Width, target.Height));
     }
 
-    /// <summary>Blends a resolved surface onto whatever framebuffer is bound (the control's output).</summary>
+    /// <summary>Blends a resolved surface onto whatever target is bound (the control's output).</summary>
     public void Present(TemperaSurface surface, int width, int height)
     {
-        _copy.Use();
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, surface.ResolvedTexture);
-        _gl.Uniform1(_copy.Uniform("uTexture"), 0);
-        _gl.Uniform2(_copy.Uniform("uInputSize"), (float)surface.Width, surface.Height);
-        _gl.Uniform4(_copy.Uniform("uFrame"), new Vector4(0, 0, surface.Width, surface.Height));
-        _gl.Uniform4(_copy.Uniform("uOutFrame"), new Vector4(0, 0, width, height));
-        _gl.Uniform2(_copy.Uniform("uOutSize"), (float)width, height);
-        _gl.Enable(EnableCap.Blend);
-        _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-        DrawQuad();
+        _copy.SetTexture("uTexture", surface.ResolvedTexture);
+        _copy.Set("uInputSize", (float)surface.Width, surface.Height);
+        _copy.Set("uFrame", new Vector4(0, 0, surface.Width, surface.Height));
+        _copy.Set("uOutFrame", new Vector4(0, 0, width, height));
+        _copy.Set("uOutSize", (float)width, height);
+        _gpu.SetBlend(GpuBlend.Alpha);
+        DrawQuad(_copy);
     }
 
     public void Dispose()
@@ -442,9 +393,7 @@ internal sealed class TemperaRenderer : IDisposable
         _invert.Dispose();
         _copy.Dispose();
         foreach (var shader in _passes.Values.Distinct()) shader.Dispose();
-        _gl.DeleteVertexArray(_quadVao);
-        _gl.DeleteBuffer(_quadVbo);
-        EffectGpuResources.For(_gl).ReleaseBuffer(_quadVbo);
+        _quad.Dispose();
         _text.Dispose();
         _ping.Dispose();
         _pong.Dispose();

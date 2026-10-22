@@ -1,3 +1,4 @@
+using AvaloniaSilkEffects.Gpu.OpenGl;
 using System.Numerics;
 using SkiaSharp;
 
@@ -8,7 +9,8 @@ public sealed class TextureCacheOpenGlTests
     [MacOpenGlFact]
     public void IdleCollectionIsBatchedAndFinishesOnFollowingFrames() => TemperaOpenGlTests.WithGl(gl =>
     {
-        using var cache = new EffectTextureCache(gl);
+        using var gpu = new GlGpuDevice(gl);
+        using var cache = new EffectTextureCache(gpu);
         var textures = Enumerable.Range(0, 48).Select(_ => cache.CreateRgba(new byte[16], 2, 2)).ToArray();
         for (var i = 0; i < 32; i++) cache.BeginFrame();
         cache.Collect(0);
@@ -24,7 +26,8 @@ public sealed class TextureCacheOpenGlTests
     [MacOpenGlFact]
     public void SoftPressureUsesLruWhileSeverePressureDrainsToLimit() => TemperaOpenGlTests.WithGl(gl =>
     {
-        using var cache = new EffectTextureCache(gl) { ResidentTextureLimit = 80 };
+        using var gpu = new GlGpuDevice(gl);
+        using var cache = new EffectTextureCache(gpu) { ResidentTextureLimit = 80 };
         var textures = Enumerable.Range(0, 100).Select(_ => cache.CreateRgba(new byte[4], 1, 1)).ToArray();
         cache.BeginFrame();
         cache.Touch(textures[0]);
@@ -44,7 +47,8 @@ public sealed class TextureCacheOpenGlTests
     [MacOpenGlFact]
     public void MemoryPressureNeverEvictsTexturesUsedByTheCurrentDraws() => TemperaOpenGlTests.WithGl(gl =>
     {
-        using var cache = new EffectTextureCache(gl) { ResidentByteLimit = 1 };
+        using var gpu = new GlGpuDevice(gl);
+        using var cache = new EffectTextureCache(gpu) { ResidentByteLimit = 1 };
         var active = cache.CreateRgba(new byte[64], 4, 4);
         cache.Collect(0);
         Assert.False(active.IsDisposed);
@@ -58,7 +62,8 @@ public sealed class TextureCacheOpenGlTests
     [MacOpenGlFact]
     public void ReleasingEveryKeyKindAllowsRecreationAndAccountsActualStorage() => TemperaOpenGlTests.WithGl(gl =>
     {
-        using var cache = new EffectTextureCache(gl);
+        using var gpu = new GlGpuDevice(gl);
+        using var cache = new EffectTextureCache(gpu);
         EffectTexture Text() => cache.GetOrCreateText("歌词", "PingFang SC", 24, 600, EffectColor.White);
         EffectTexture Layer() => cache.GetOrCreateTextLayer("发光", "PingFang SC", 24, 600, EffectColor.White, EffectColor.White, 2);
         EffectTexture Vector() => cache.GetOrCreateVector("vector", new Vector2(8, 4), 1, c => c.Clear(SKColors.White));

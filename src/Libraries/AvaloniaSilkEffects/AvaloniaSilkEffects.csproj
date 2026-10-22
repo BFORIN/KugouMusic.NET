@@ -6,13 +6,19 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>AvaloniaSilkEffects</AssemblyName>
     <PackageId>AvaloniaSilkEffects</PackageId>
-    <Description>A small OpenGL effects layer for Avalonia, built for kinetic typography and post-processing.</Description>
+    <Description>A small GPU (Metal / Vulkan / OpenGL) effects layer for Avalonia, built for kinetic typography and post-processing.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Silk.NET.Core" />
     <PackageReference Include="Silk.NET.OpenGL" />
+    <PackageReference Include="Silk.NET.Shaderc" />
+    <PackageReference Include="Silk.NET.Shaderc.Native" />
+    <PackageReference Include="Silk.NET.SPIRV.Cross" />
+    <PackageReference Include="Silk.NET.SPIRV.Cross.Native" />
+    <PackageReference Include="Silk.NET.Vulkan" />
+    <PackageReference Include="Silk.NET.Vulkan.Extensions.KHR" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.HarfBuzz" />
     <PackageReference Include="ZLinq" />

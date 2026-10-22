@@ -1,5 +1,5 @@
 using Avalonia;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Backgrounds;
 
@@ -42,10 +42,9 @@ public sealed class LatentBackgroundScene : EffectScene
 
     public LatentAudio Audio { get; set; } = new();
     public LatentPalette Palette { get; set; } = LatentPalette.Midnight;
-    private GL _gl = null!;
-    private EffectShaderProgram? _mesh, _dither, _composite;
-    private EffectFramebuffer? _meshBuffer, _ditherBuffer;
-    private uint _vao;
+    private GpuDevice _gpu = null!;
+    private GpuShader? _mesh, _dither, _composite;
+    private GpuRenderTarget? _meshBuffer, _ditherBuffer;
     private double _scaling = 1;
     private LatentModulation _motion = new();
     private LatentPalette? _lastPalette;
@@ -56,19 +55,17 @@ public sealed class LatentBackgroundScene : EffectScene
     public override void Initialize(EffectDevice device)
     {
         base.Initialize(device);
-        _gl = device.Gl;
+        _gpu = device.Gpu;
         // Previous handles can belong to a lost context; never delete them here.
         _mesh = _dither = _composite = null;
         _meshBuffer = _ditherBuffer = null;
-        _vao = 0;
         try
         {
-            _mesh = new EffectShaderProgram(_gl,Vertex,LatentShaders.Mesh,"Folia latent mesh");
-            _dither = new EffectShaderProgram(_gl,Vertex,LatentShaders.Dither,"Folia latent dither");
-            _composite = new EffectShaderProgram(_gl,Vertex,Composite,"Folia latent soft-light");
-            _meshBuffer = new EffectFramebuffer(_gl);
-            _ditherBuffer = new EffectFramebuffer(_gl);
-            _vao = _gl.GenVertexArray();
+            _mesh = _gpu.CreateShader(Vertex,LatentShaders.Mesh,"Folia latent mesh");
+            _dither = _gpu.CreateShader(Vertex,LatentShaders.Dither,"Folia latent dither");
+            _composite = _gpu.CreateShader(Vertex,Composite,"Folia latent soft-light");
+            _meshBuffer = _gpu.CreateRenderTarget(depthStencil: true);
+            _ditherBuffer = _gpu.CreateRenderTarget(depthStencil: true);
         }
         catch { DisposeGpuResources(); throw; }
     }
@@ -89,72 +86,62 @@ public sealed class LatentBackgroundScene : EffectScene
         var factor = Math.Min(1,Math.Sqrt(1280d*720/(size.Width*(double)size.Height)));
         var w = Math.Max(1,(int)Math.Round(size.Width*factor));
         var h = Math.Max(1,(int)Math.Round(size.Height*factor));
-        _gl.GetInteger(GetPName.DrawFramebufferBinding,out var target);
-        _gl.Disable(EnableCap.Blend);
-        _gl.BindVertexArray(_vao);
+        var gpu = _gpu;
+        var target = gpu.Target!;
+        var viewport = gpu.Viewport;
+        gpu.SetBlend(GpuBlend.None);
         try
         {
             _meshBuffer!.EnsureSize(w,h);
             _ditherBuffer!.EnsureSize(w,h);
             DrawPass(_mesh,_meshBuffer,w,h,(float)_motion.MeshTime);
-            Set(_mesh,"u_colorsCount",6);
-            for (var i=0;i<6;i++) Color(_mesh,ColorUniforms[i],_colors[i]);
-            Set(_mesh,"u_distortion",.8f+_motion.Power*.62f);
-            Set(_mesh,"u_swirl",.1f+_motion.Mid*.38f);
-            Set(_mesh,"u_grainMixer",0);
-            Set(_mesh,"u_grainOverlay",.01f);
-            _gl.DrawArrays(PrimitiveType.Triangles,0,3);
+            _mesh.Set("u_colorsCount",6);
+            for (var i=0;i<6;i++) _mesh.Set(ColorUniforms[i],_colors[i]);
+            _mesh.Set("u_distortion",.8f+_motion.Power*.62f);
+            _mesh.Set("u_swirl",.1f+_motion.Mid*.38f);
+            _mesh.Set("u_grainMixer",0f);
+            _mesh.Set("u_grainOverlay",.01f);
+            gpu.DrawFullscreen(_mesh);
 
             DrawPass(_dither,_ditherBuffer,w,h,(float)_motion.DitherTime);
-            Set(_dither,"u_pixelRatio",(float)(_scaling*w/size.Width));
-            Set(_dither,"u_originX",.5f); Set(_dither,"u_originY",.5f);
-            Set(_dither,"u_scale",1); Set(_dither,"u_fit",0);
-            Set(_dither,"u_pxSize",Math.Max(.5f,2.5f-_motion.Bass*2.5f*.34f));
-            Set(_dither,"u_shape",2); Set(_dither,"u_type",3);
-            Color(_dither,"u_colorBack",palette.DitheringBackground);
-            Color(_dither,"u_colorFront",_colors[0]);
-            _gl.DrawArrays(PrimitiveType.Triangles,0,3);
+            _dither.Set("u_pixelRatio",(float)(_scaling*w/size.Width));
+            _dither.Set("u_originX",.5f); _dither.Set("u_originY",.5f);
+            _dither.Set("u_scale",1f); _dither.Set("u_fit",0f);
+            _dither.Set("u_pxSize",Math.Max(.5f,2.5f-_motion.Bass*2.5f*.34f));
+            _dither.Set("u_shape",2f); _dither.Set("u_type",3f);
+            _dither.Set("u_colorBack",palette.DitheringBackground);
+            _dither.Set("u_colorFront",_colors[0]);
+            gpu.DrawFullscreen(_dither);
 
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer,(uint)target);
-            _gl.Viewport(0,0,(uint)size.Width,(uint)size.Height);
-            _composite.Use();
-            _gl.ActiveTexture(TextureUnit.Texture0);
-            _gl.BindTexture(TextureTarget.Texture2D,_meshBuffer.Texture);
-            _gl.Uniform1(_composite.Uniform("uMesh"),0);
-            _gl.ActiveTexture(TextureUnit.Texture1);
-            _gl.BindTexture(TextureTarget.Texture2D,_ditherBuffer.Texture);
-            _gl.Uniform1(_composite.Uniform("uDither"),1);
-            _gl.Uniform3(_composite.Uniform("uBackground"),palette.Background.R,palette.Background.G,palette.Background.B);
-            Set(_composite,"uPower",_motion.Power); Set(_composite,"uBass",_motion.Bass); Set(_composite,"uMid",_motion.Mid);
-            _gl.DrawArrays(PrimitiveType.Triangles,0,3);
+            gpu.SetTarget(target);
+            gpu.SetViewport(new GpuRect(0,0,size.Width,size.Height));
+            _composite.SetTexture("uMesh",_meshBuffer.Texture);
+            _composite.SetTexture("uDither",_ditherBuffer.Texture);
+            _composite.Set("uBackground",palette.Background.R,palette.Background.G,palette.Background.B);
+            _composite.Set("uPower",_motion.Power); _composite.Set("uBass",_motion.Bass); _composite.Set("uMid",_motion.Mid);
+            gpu.DrawFullscreen(_composite);
             context.Primitives.RecordExternalDrawCalls(3);
         }
         finally
         {
-            _gl.ActiveTexture(TextureUnit.Texture0);
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer,(uint)target);
-            _gl.Viewport(0,0,(uint)size.Width,(uint)size.Height);
+            gpu.SetTarget(target);
+            gpu.SetViewport(viewport);
         }
     }
 
-    private void DrawPass(EffectShaderProgram program, EffectFramebuffer buffer,int w,int h,float time)
+    private void DrawPass(GpuShader program, GpuRenderTarget buffer,int w,int h,float time)
     {
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer,buffer.Framebuffer);
-        _gl.Viewport(0,0,(uint)w,(uint)h);
-        program.Use();
-        _gl.Uniform2(program.Uniform("u_resolution"),(float)w,(float)h);
-        Set(program,"u_time",time);
+        _gpu.SetTarget(buffer);
+        _gpu.SetViewport(new GpuRect(0,0,w,h));
+        program.Set("u_resolution",(float)w,(float)h);
+        program.Set("u_time",time);
     }
-    private void Set(EffectShaderProgram p,string name,float value) => _gl.Uniform1(p.Uniform(name),value);
-    private void Color(EffectShaderProgram p,string name,EffectColor c) => _gl.Uniform4(p.Uniform(name),c.R,c.G,c.B,c.A);
 
     public override void DisposeGpuResources()
     {
         _mesh?.Dispose(); _dither?.Dispose(); _composite?.Dispose();
         _meshBuffer?.Dispose(); _ditherBuffer?.Dispose();
-        if (_vao != 0) _gl.DeleteVertexArray(_vao);
         _mesh = _dither = _composite = null;
         _meshBuffer = _ditherBuffer = null;
-        _vao = 0;
     }
 }

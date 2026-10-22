@@ -1,5 +1,5 @@
 using System.Numerics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 using SkiaSharp;
 
 namespace AvaloniaSilkEffects.Lumiere.Light;
@@ -11,12 +11,12 @@ namespace AvaloniaSilkEffects.Lumiere.Light;
 /// </summary>
 internal sealed class LumiereSprites : IDisposable
 {
-    public LumiereSprites(GL gl)
+    public LumiereSprites(GpuDevice gpu)
     {
-        Dot = Upload(gl, DrawDot(128));
-        Star = Upload(gl, DrawStar(256));
-        Bokeh = Upload(gl, DrawBokeh(128));
-        Streak = Upload(gl, DrawStreak(512, 32));
+        Dot = Upload(gpu, DrawDot(128));
+        Star = Upload(gpu, DrawStar(256));
+        Bokeh = Upload(gpu, DrawBokeh(128));
+        Streak = Upload(gpu, DrawStreak(512, 32));
     }
 
     public EffectTexture Dot { get; }
@@ -123,21 +123,11 @@ internal sealed class LumiereSprites : IDisposable
         return bitmap;
     }
 
-    private static unsafe EffectTexture Upload(GL gl, SKBitmap bitmap)
+    private static unsafe EffectTexture Upload(GpuDevice gpu, SKBitmap bitmap)
     {
         using (bitmap)
-        {
-            var handle = gl.GenTexture();
-            gl.BindTexture(TextureTarget.Texture2D, handle);
-            gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Linear);
-            gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Linear);
-            gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)GLEnum.ClampToEdge);
-            gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)GLEnum.ClampToEdge);
-            gl.PixelStore(PixelStoreParameter.UnpackAlignment, 4);
-            gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)bitmap.Width, (uint)bitmap.Height, 0,
-                PixelFormat.Rgba, PixelType.UnsignedByte, (void*)bitmap.GetPixels());
-            return new EffectTexture(gl, handle, bitmap.Width, bitmap.Height, new Vector2(bitmap.Width, bitmap.Height));
-        }
+            return EffectTexture.Upload(gpu, new ReadOnlySpan<byte>((void*)bitmap.GetPixels(), bitmap.ByteCount),
+                bitmap.Width, bitmap.Height, new Vector2(bitmap.Width, bitmap.Height));
     }
 
     public void Dispose()

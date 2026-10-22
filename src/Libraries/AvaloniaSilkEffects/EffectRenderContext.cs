@@ -1,18 +1,18 @@
 using Avalonia;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects;
 
 public sealed class EffectRenderContext
 {
-    private readonly GL _gl;
+    private readonly GpuDevice _gpu;
     private readonly Stack<Rect> _clips = [];
 
     internal EffectRenderContext(EffectDevice device, EffectPrimitiveRenderer primitives)
     {
         Device = device;
         Primitives = primitives;
-        _gl = device.Gl;
+        _gpu = device.Gpu;
     }
 
     public EffectDevice Device { get; }
@@ -33,7 +33,7 @@ public sealed class EffectRenderContext
             if (_clips.TryPeek(out var previous))
                 ApplyClip(previous);
             else
-                _gl.Disable(EnableCap.ScissorTest);
+                _gpu.SetScissor(null);
         });
     }
 
@@ -41,20 +41,17 @@ public sealed class EffectRenderContext
     {
         ArgumentNullException.ThrowIfNull(drawMask);
         Primitives.Flush();
-        _gl.Enable(EnableCap.StencilTest);
-        _gl.Clear(ClearBufferMask.StencilBufferBit);
-        _gl.ColorMask(false, false, false, false);
-        _gl.StencilFunc(StencilFunction.Always, 1, 0xFF);
-        _gl.StencilOp(Silk.NET.OpenGL.StencilOp.Keep, Silk.NET.OpenGL.StencilOp.Keep, Silk.NET.OpenGL.StencilOp.Replace);
+        _gpu.Clear(null, stencil: true);
+        _gpu.SetColorWrite(false);
+        _gpu.SetStencil(GpuStencil.WriteOne);
         drawMask(Primitives);
         Primitives.Flush();
-        _gl.ColorMask(true, true, true, true);
-        _gl.StencilFunc(StencilFunction.Equal, 1, 0xFF);
-        _gl.StencilOp(Silk.NET.OpenGL.StencilOp.Keep, Silk.NET.OpenGL.StencilOp.Keep, Silk.NET.OpenGL.StencilOp.Keep);
+        _gpu.SetColorWrite(true);
+        _gpu.SetStencil(GpuStencil.EqualOne);
         return new Scope(() =>
         {
             Primitives.Flush();
-            _gl.Disable(EnableCap.StencilTest);
+            _gpu.SetStencil(GpuStencil.Disabled);
         });
     }
 
@@ -64,8 +61,7 @@ public sealed class EffectRenderContext
         var y = Math.Max(0, PixelSize.Height - (int)Math.Ceiling(clip.Bottom));
         var width = Math.Max(0, Math.Min(PixelSize.Width - x, (int)Math.Ceiling(clip.Width)));
         var height = Math.Max(0, Math.Min(PixelSize.Height - y, (int)Math.Ceiling(clip.Height)));
-        _gl.Enable(EnableCap.ScissorTest);
-        _gl.Scissor(x, y, (uint)width, (uint)height);
+        _gpu.SetScissor(new GpuRect(x, y, width, height));
     }
 
     private sealed class Scope(Action dispose) : IDisposable

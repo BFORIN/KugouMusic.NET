@@ -1,11 +1,9 @@
-using System.Runtime.CompilerServices;
 using System.Diagnostics;
-using Silk.NET.OpenGL;
 
 namespace AvaloniaSilkEffects;
 
 /// <summary>
-/// Application-owned storage estimates. Excludes driver overhead, shader programs, VAOs, the compositor's
+/// Application-owned storage estimates. Excludes driver overhead, shader programs, pipeline objects, the compositor's
 /// output target and native staging memory. RenderTargetBytes includes color, MSAA and depth/stencil attachments.
 /// </summary>
 public readonly record struct EffectGpuResourceStatistics(
@@ -16,12 +14,10 @@ public readonly record struct EffectGpuResourceStatistics(
 
 internal sealed class EffectGpuResources
 {
-    // GL API instances belong to their contexts; handles from separate surfaces must never share a ledger.
-    private static readonly ConditionalWeakTable<GL, EffectGpuResources> Ledgers = new();
-    internal static EffectGpuResources For(GL gl) => Ledgers.GetValue(gl, static _ => new());
-    private readonly Dictionary<uint, long> _textures = [];
-    private readonly Dictionary<uint, long> _targets = [];
-    private readonly Dictionary<uint, long> _buffers = [];
+    // Each GpuDevice owns one ledger; resources are keyed by GpuResource.Id.
+    private readonly Dictionary<long, long> _textures = [];
+    private readonly Dictionary<long, long> _targets = [];
+    private readonly Dictionary<long, long> _buffers = [];
     private long _textureBytes, _targetBytes, _bufferBytes;
     public long FrameUploadedBytes { get; private set; }
     public int FrameCreatedTextures { get; private set; }
@@ -81,20 +77,20 @@ internal sealed class EffectGpuResources
         }
     }
     public void Uploaded(long bytes) => FrameUploadedBytes += bytes;
-    public void Texture(uint handle, long bytes)
+    public void Texture(long handle, long bytes)
     {
         if (!_textures.ContainsKey(handle)) FrameCreatedTextures++;
         Set(_textures, handle, bytes, ref _textureBytes);
     }
-    public void ReleaseTexture(uint handle)
+    public void ReleaseTexture(long handle)
     {
         if (_textures.ContainsKey(handle)) FrameReleasedTextures++;
         Remove(_textures, handle, ref _textureBytes);
     }
-    public void Target(uint handle, long bytes) => Set(_targets, handle, bytes, ref _targetBytes);
-    public void ReleaseTarget(uint handle) => Remove(_targets, handle, ref _targetBytes);
-    public void Buffer(uint handle, long bytes) => Set(_buffers, handle, bytes, ref _bufferBytes);
-    public void ReleaseBuffer(uint handle) => Remove(_buffers, handle, ref _bufferBytes);
+    public void Target(long handle, long bytes) => Set(_targets, handle, bytes, ref _targetBytes);
+    public void ReleaseTarget(long handle) => Remove(_targets, handle, ref _targetBytes);
+    public void Buffer(long handle, long bytes) => Set(_buffers, handle, bytes, ref _bufferBytes);
+    public void ReleaseBuffer(long handle) => Remove(_buffers, handle, ref _bufferBytes);
 
     public void Abandon()
     {
@@ -103,12 +99,12 @@ internal sealed class EffectGpuResources
         BeginFrame();
     }
 
-    private static void Set(Dictionary<uint, long> entries, uint handle, long bytes, ref long total)
+    private static void Set(Dictionary<long, long> entries, long handle, long bytes, ref long total)
     {
         total += bytes - entries.GetValueOrDefault(handle);
         entries[handle] = bytes;
     }
-    private static void Remove(Dictionary<uint, long> entries, uint handle, ref long total)
+    private static void Remove(Dictionary<long, long> entries, long handle, ref long total)
     {
         if (entries.Remove(handle, out var bytes)) total -= bytes;
     }

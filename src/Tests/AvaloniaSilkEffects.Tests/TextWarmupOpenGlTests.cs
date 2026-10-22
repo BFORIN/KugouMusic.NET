@@ -1,3 +1,4 @@
+using AvaloniaSilkEffects.Gpu.OpenGl;
 using Avalonia;
 using AvaloniaSilkEffects.Lumiere;
 using AvaloniaSilkEffects.Lumiere.Text;
@@ -14,7 +15,8 @@ public sealed class TextWarmupOpenGlTests
     [MacOpenGlFact]
     public void NativeVectorUploadPreservesPixelsWithoutAnImageSizedManagedCopy() => TemperaOpenGlTests.WithGl(gl =>
     {
-        using var cache = new EffectTextureCache(gl);
+        using var gpu = new GlGpuDevice(gl);
+        using var cache = new EffectTextureCache(gpu);
         cache.GetOrCreateVector("warm", new(8), 1, c => c.Clear(SKColors.White));
         var before = GC.GetAllocatedBytesForCurrentThread();
         var texture = cache.GetOrCreateVector("large", new(1024), 1, c => c.Clear(new SKColor(80, 120, 160, 255)));
@@ -34,7 +36,8 @@ public sealed class TextWarmupOpenGlTests
     [MacOpenGlFact]
     public void TemperaSharesMeasurementsAndGlyphsAndRecreatesReleasedTextures() => TemperaOpenGlTests.WithGl(gl =>
     {
-        using var cache = new EffectTextureCache(gl);
+        using var gpu = new GlGpuDevice(gl);
+        using var cache = new EffectTextureCache(gpu);
         var glyphs = new TemperaGlyphCache(cache);
         const string text = "中文 AV 👩‍🚀 words wrap";
         var estimated = glyphs.EstimateBytes(text, "PingFang SC", 600, 32, 180, 2);
@@ -60,7 +63,7 @@ public sealed class TextWarmupOpenGlTests
     public void TemperaWarmupSpreadsWorkAndRespectsStorageAndCurrentDraws() => TemperaOpenGlTests.WithGl(gl =>
     {
         using var device = new EffectDevice(gl);
-        using var renderer = new TemperaRenderer(gl, device.Primitives, device.Textures);
+        using var renderer = new TemperaRenderer(device.Gpu, device.Primitives, device.Textures);
         var root = new TemperaGroup();
         for (var i = 0; i < 5; i++) root.Add(new TemperaText { Text = "预热" + i, FontFamily = "PingFang SC", FontWeight = 600, FontSize = 32 });
         var resources = device.Textures.TextResources;
@@ -102,7 +105,8 @@ public sealed class TextWarmupOpenGlTests
         foreach (var text in new[] { "", "AVTo 字形", "👩‍🚀e\u0301 日本語" })
         foreach (var scale in new[] { 1f, 2f })
         {
-            using var line = new LumiereGlyphLine(gl, text, 43.5f, "PingFang SC", 600, scale, 0.04f);
+            using var gpu = new GlGpuDevice(gl);
+            using var line = new LumiereGlyphLine(gpu, text, 43.5f, "PingFang SC", 600, scale, 0.04f);
             Assert.Equal(line.Texture.EstimatedBytes, LumiereGlyphLine.EstimateBytes(text, 43.5f, "PingFang SC", 600, scale,
                 LumiereReveal.Graphemes(text).Count, 0.04f));
         }

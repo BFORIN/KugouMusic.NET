@@ -1,4 +1,4 @@
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Lumiere.Light;
 
@@ -52,80 +52,62 @@ internal sealed class LumiereCompositor : IDisposable
         }
         """;
 
-    private readonly GL _gl;
-    private readonly EffectShaderProgram _blit;
-    private readonly EffectShaderProgram _gauss;
-    private readonly uint _vao;
+    private readonly GpuDevice _gpu;
+    private readonly GpuShader _blit;
+    private readonly GpuShader _gauss;
 
-    public LumiereCompositor(GL gl)
+    public LumiereCompositor(GpuDevice gpu)
     {
-        _gl = gl;
-        _blit = new EffectShaderProgram(gl, Vertex, Blit, "lumiere-layer-blit");
-        _gauss = new EffectShaderProgram(gl, Vertex, Gauss, "lumiere-layer-blur");
-        _vao = gl.GenVertexArray();
-        Layer = new EffectColorTarget(gl);
-        _blurA = new EffectColorTarget(gl);
-        _blurB = new EffectColorTarget(gl);
+        _gpu = gpu;
+        _blit = gpu.CreateShader(Vertex, Blit, "lumiere-layer-blit");
+        _gauss = gpu.CreateShader(Vertex, Gauss, "lumiere-layer-blur");
+        Layer = gpu.CreateRenderTarget(depthStencil: false);
+        _blurA = gpu.CreateRenderTarget(depthStencil: false);
+        _blurB = gpu.CreateRenderTarget(depthStencil: false);
     }
 
-    /// <summary>The layer target a scene renders into before compositing (same size as the output).</summary>
-    public EffectColorTarget Layer { get; }
+    public GpuRenderTarget Layer { get; }
     public int DrawCalls { get; private set; }
-    private readonly EffectColorTarget _blurA;
-    private readonly EffectColorTarget _blurB;
+    private readonly GpuRenderTarget _blurA;
+    private readonly GpuRenderTarget _blurB;
 
-    /// <summary>
-    /// Composites <see cref="Layer"/> onto <paramref name="output"/>: alpha, scale about the center plus a vertical offset (as a
-    /// fraction of the height), blur strength in output pixels.
-    /// </summary>
     public void Composite(LumiereBinding output, float alpha, float scale, float blurPixels, float offsetY = 0)
     {
-        using var timing = EffectGpuResources.For(_gl).MeasurePostProcess();
+        using var timing = _gpu.Resources.MeasurePostProcess();
         DrawCalls = 0;
-        var gl = _gl;
-        gl.BindVertexArray(_vao);
-        gl.ActiveTexture(TextureUnit.Texture0);
-        var source = Layer.Texture;
+        var gpu = _gpu;
+        var source = Layer.Texture!;
         if (blurPixels > 0.3f)
         {
             _blurA.EnsureSize((Layer.Width + 1) / 2, (Layer.Height + 1) / 2);
             _blurB.EnsureSize(_blurA.Width, _blurA.Height);
-            gl.Disable(EnableCap.Blend);
-            _blurA.Bind(false);
-            _blit.Use();
-            gl.Uniform1(_blit.Uniform("uTexture"), 0);
-            gl.Uniform4(_blit.Uniform("uMap"), 1f, 1f, 0f, 0f);
-            gl.Uniform1(_blit.Uniform("uAlpha"), 1f);
-            gl.BindTexture(TextureTarget.Texture2D, Layer.Texture);
-            gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            gpu.SetBlend(GpuBlend.None);
+            gpu.SetTarget(_blurA);
+            _blit.Set("uMap", 1f, 1f, 0f, 0f);
+            _blit.Set("uAlpha", 1f);
+            _blit.SetTexture("uTexture", Layer.Texture);
+            gpu.DrawFullscreen(_blit);
             DrawCalls++;
-            // Strength → sigma in half-resolution pixels.
             var sigma = blurPixels * 0.5f * 0.5f;
-            _gauss.Use();
-            gl.Uniform1(_gauss.Uniform("uTexture"), 0);
-            _blurB.Bind(false);
-            gl.Uniform2(_gauss.Uniform("uStep"), sigma / _blurA.Width, 0f);
-            gl.BindTexture(TextureTarget.Texture2D, _blurA.Texture);
-            gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            gpu.SetTarget(_blurB);
+            _gauss.Set("uStep", sigma / _blurA.Width, 0f);
+            _gauss.SetTexture("uTexture", _blurA.Texture);
+            gpu.DrawFullscreen(_gauss);
             DrawCalls++;
-            _blurA.Bind(false);
-            gl.Uniform2(_gauss.Uniform("uStep"), 0f, sigma / _blurA.Height);
-            gl.BindTexture(TextureTarget.Texture2D, _blurB.Texture);
-            gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            gpu.SetTarget(_blurA);
+            _gauss.Set("uStep", 0f, sigma / _blurA.Height);
+            _gauss.SetTexture("uTexture", _blurB.Texture);
+            gpu.DrawFullscreen(_gauss);
             DrawCalls++;
-            source = _blurA.Texture;
+            source = _blurA.Texture!;
         }
-        output.Restore(gl);
-        gl.Enable(EnableCap.Blend);
-        gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-        _blit.Use();
-        gl.Uniform1(_blit.Uniform("uTexture"), 0);
-        // Output uv u maps to source (u − 0.5) / scale + 0.5; texture v runs bottom-up, so a downward offset subtracts.
+        output.Restore(gpu);
+        gpu.SetBlend(GpuBlend.Alpha);
         var inverse = 1 / MathF.Max(scale, 1e-3f);
-        gl.Uniform4(_blit.Uniform("uMap"), inverse, inverse, 0.5f - 0.5f * inverse, 0.5f - 0.5f * inverse + offsetY * inverse);
-        gl.Uniform1(_blit.Uniform("uAlpha"), alpha);
-        gl.BindTexture(TextureTarget.Texture2D, source);
-        gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+        _blit.Set("uMap", inverse, inverse, 0.5f - 0.5f * inverse, 0.5f - 0.5f * inverse + offsetY * inverse);
+        _blit.Set("uAlpha", alpha);
+        _blit.SetTexture("uTexture", source);
+        gpu.DrawFullscreen(_blit);
         DrawCalls++;
     }
 
@@ -136,6 +118,5 @@ internal sealed class LumiereCompositor : IDisposable
         _blurB.Dispose();
         _blit.Dispose();
         _gauss.Dispose();
-        _gl.DeleteVertexArray(_vao);
     }
 }

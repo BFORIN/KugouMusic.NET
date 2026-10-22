@@ -194,8 +194,9 @@ public sealed class TemperaOpenGlTests
     [MacOpenGlFact]
     public void MetricsIncludeCustomDrawsUploadsAndReleaseAllGpuStorage() => WithGl(gl =>
     {
-        var ledger = EffectGpuResources.For(gl);
-        using (var device = new EffectDevice(gl))
+        var device = new EffectDevice(gl);
+        var ledger = device.Gpu.Resources;
+        using (device)
         using (var target = new EffectFramebuffer(gl))
         {
             var size = new PixelSize(640, 360);

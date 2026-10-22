@@ -220,7 +220,7 @@ public sealed class SonnetSceneCaptureTests
         encoded.SaveTo(output);
     }
 
-    private static SonnetScene CreatePlayerScene()
+    internal static SonnetScene CreatePlayerScene()
     {
         var theme = new SonnetTheme(
             Background: new(0.051f, 0.071f, 0.208f, 1),

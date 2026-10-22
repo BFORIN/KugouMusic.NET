@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects;
 
@@ -64,16 +64,19 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         }
         """;
 
-    private readonly GL _gl;
-    private readonly EffectShaderProgram _shader;
-    private readonly uint _vao;
-    private readonly uint _vbo;
-    private readonly uint _whiteTexture;
+    internal static readonly GpuVertexLayout Layout = GpuVertexLayout.For<EffectVertex>(
+        new GpuVertexAttribute(0, 2, 0),
+        new GpuVertexAttribute(1, 2, 2 * sizeof(float)),
+        new GpuVertexAttribute(2, 4, 4 * sizeof(float)),
+        new GpuVertexAttribute(3, 1, 8 * sizeof(float)));
+
+    private readonly GpuDevice _device;
+    private readonly GpuShader _shader;
+    private readonly GpuTexture _whiteTexture;
     private readonly List<EffectVertex> _vertices = new(2048);
-    private uint _activeTexture;
+    private GpuTexture _activeTexture;
     private EffectBlendMode _activeBlend;
     private Vector2 _viewport;
-    private nuint _bufferCapacityBytes;
 
     internal int FrameDrawCalls { get; private set; }
     internal int FrameFlushes { get; private set; }
@@ -81,32 +84,13 @@ public sealed class EffectPrimitiveRenderer : IDisposable
 
     internal void RecordExternalDrawCalls(int count) => FrameDrawCalls += count;
 
-    internal unsafe EffectPrimitiveRenderer(GL gl)
+    internal EffectPrimitiveRenderer(GpuDevice device)
     {
-        _gl = gl;
-        _shader = new EffectShaderProgram(gl, VertexShader, FragmentShader, "effects-2d");
-        _vao = gl.GenVertexArray();
-        _vbo = gl.GenBuffer();
-        gl.BindVertexArray(_vao);
-        gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
-        var stride = (uint)Marshal.SizeOf<EffectVertex>();
-        gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, stride, (void*)0);
-        gl.EnableVertexAttribArray(0);
-        gl.VertexAttribPointer(1, 2, VertexAttribPointerType.Float, false, stride, (void*)(2 * sizeof(float)));
-        gl.EnableVertexAttribArray(1);
-        gl.VertexAttribPointer(2, 4, VertexAttribPointerType.Float, false, stride, (void*)(4 * sizeof(float)));
-        gl.EnableVertexAttribArray(2);
-        gl.VertexAttribPointer(3, 1, VertexAttribPointerType.Float, false, stride, (void*)(8 * sizeof(float)));
-        gl.EnableVertexAttribArray(3);
-
-        _whiteTexture = gl.GenTexture();
-        EffectGpuResources.For(gl).Texture(_whiteTexture, 4);
-        gl.BindTexture(TextureTarget.Texture2D, _whiteTexture);
-        var white = 0xFFFFFFFFu;
-        gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, 1, 1, 0,
-            PixelFormat.Rgba, PixelType.UnsignedByte, &white);
-        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)GLEnum.Nearest);
-        gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)GLEnum.Nearest);
+        _device = device;
+        _shader = device.CreateShader(VertexShader, FragmentShader, "effects-2d");
+        _whiteTexture = device.CreateTexture(1, 1, [255, 255, 255, 255], GpuFilter.Nearest);
+        _activeTexture = _whiteTexture;
+        device.Resources.Texture(_whiteTexture.Id, 4);
     }
 
     internal void Begin(int width, int height)
@@ -260,7 +244,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         EffectBlendMode blendMode = EffectBlendMode.Alpha,
         EffectColor? tint = null,
         float blur = 0) =>
-        DrawQuad(transform, size, WithAlpha(tint ?? EffectColor.White, alpha), blendMode, texture.Handle,
+        DrawQuad(transform, size, WithAlpha(tint ?? EffectColor.White, alpha), blendMode, texture.Gpu,
             BlurInTexels(texture, size, blur));
 
     // Blur is authored in the node's local units; the shader samples in texels of
@@ -279,7 +263,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
     public void DrawTextureRegion(EffectTexture texture, Matrix3x2 transform, Vector2 size, Vector4 uv,
         float alpha = 1, EffectColor? tint = null, EffectBlendMode blendMode = EffectBlendMode.Alpha)
     {
-        Select(texture.Handle, blendMode);
+        Select(texture.Gpu, blendMode);
         var color = WithAlpha(tint ?? EffectColor.White, alpha).Premultiplied().ToVector4();
         var a = Vector2.Transform(Vector2.Zero, transform);
         var b = Vector2.Transform(new Vector2(size.X, 0), transform);
@@ -301,7 +285,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         left = Math.Clamp(left, 0, size.X);
         right = Math.Clamp(right, left, size.X);
         if (right <= left) return;
-        Select(texture.Handle, EffectBlendMode.Alpha);
+        Select(texture.Gpu, EffectBlendMode.Alpha);
         var a = Vector2.Transform(new Vector2(left, 0), transform);
         var b = Vector2.Transform(new Vector2(right, 0), transform);
         var c = Vector2.Transform(new Vector2(right, size.Y), transform);
@@ -363,36 +347,21 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         }
     }
 
-    internal unsafe void Flush()
+    internal void Flush()
     {
         if (_vertices.Count == 0)
             return;
 
-        _shader.Use();
-        _gl.Uniform2(_shader.Uniform("uViewport"), _viewport.X, _viewport.Y);
-        _gl.Uniform1(_shader.Uniform("uTexture"), 0);
-        _gl.ActiveTexture(TextureUnit.Texture0);
-        _gl.BindTexture(TextureTarget.Texture2D, _activeTexture);
-        ApplyBlend(_activeBlend);
-        _gl.BindVertexArray(_vao);
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+        _shader.Set("uViewport", _viewport.X, _viewport.Y);
+        _shader.SetTexture("uTexture", _activeTexture);
+        _device.SetBlend(ToGpu(_activeBlend));
         var data = CollectionsMarshal.AsSpan(_vertices);
-        var uploadBytes = (nuint)(data.Length * Marshal.SizeOf<EffectVertex>());
-        fixed (EffectVertex* vertices = data)
-        {
-            if (uploadBytes > _bufferCapacityBytes)
-            {
-                _bufferCapacityBytes = GrowCapacity(uploadBytes);
-                _gl.BufferData(BufferTargetARB.ArrayBuffer, _bufferCapacityBytes, null, BufferUsageARB.StreamDraw);
-                EffectGpuResources.For(_gl).Buffer(_vbo, (long)_bufferCapacityBytes);
-            }
-            _gl.BufferSubData(BufferTargetARB.ArrayBuffer, 0, uploadBytes, vertices);
-        }
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, (uint)data.Length);
+        var uploadBytes = data.Length * Marshal.SizeOf<EffectVertex>();
+        _device.Draw<EffectVertex>(_shader, Layout, data);
         FrameDrawCalls++;
         FrameFlushes++;
-        FrameUploadedBytes += (long)uploadBytes;
-        EffectGpuResources.For(_gl).Uploaded((long)uploadBytes);
+        FrameUploadedBytes += uploadBytes;
+        _device.Resources.Uploaded(uploadBytes);
         _vertices.Clear();
     }
 
@@ -404,7 +373,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
         return capacity;
     }
 
-    private void DrawQuad(Matrix3x2 transform, Vector2 size, EffectColor color, EffectBlendMode blendMode, uint texture,
+    private void DrawQuad(Matrix3x2 transform, Vector2 size, EffectColor color, EffectBlendMode blendMode, GpuTexture texture,
         float blur = 0)
     {
         Select(texture, blendMode);
@@ -444,33 +413,21 @@ public sealed class EffectPrimitiveRenderer : IDisposable
 
     private static float Lerp(float start, float end, float progress) => start + (end - start) * progress;
 
-    private void Select(uint texture, EffectBlendMode blendMode)
+    private void Select(GpuTexture texture, EffectBlendMode blendMode)
     {
-        if (_vertices.Count > 0 && (_activeTexture != texture || _activeBlend != blendMode))
+        if (_vertices.Count > 0 && (!ReferenceEquals(_activeTexture, texture) || _activeBlend != blendMode))
             Flush();
         _activeTexture = texture;
         _activeBlend = blendMode;
     }
 
-    private void ApplyBlend(EffectBlendMode mode)
+    internal static GpuBlend ToGpu(EffectBlendMode mode) => mode switch
     {
-        _gl.Enable(EnableCap.Blend);
-        switch (mode)
-        {
-            case EffectBlendMode.Additive:
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.One);
-                break;
-            case EffectBlendMode.Screen:
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcColor);
-                break;
-            case EffectBlendMode.Multiply:
-                _gl.BlendFunc(BlendingFactor.DstColor, BlendingFactor.OneMinusSrcAlpha);
-                break;
-            default:
-                _gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-                break;
-        }
-    }
+        EffectBlendMode.Additive => GpuBlend.Additive,
+        EffectBlendMode.Screen => GpuBlend.Screen,
+        EffectBlendMode.Multiply => GpuBlend.Multiply,
+        _ => GpuBlend.Alpha,
+    };
 
     private static EffectColor WithAlpha(EffectColor color, float alpha) =>
         color with { A = color.A * Math.Clamp(alpha, 0, 1) };
@@ -478,10 +435,7 @@ public sealed class EffectPrimitiveRenderer : IDisposable
     public void Dispose()
     {
         _shader.Dispose();
-        _gl.DeleteTexture(_whiteTexture);
-        _gl.DeleteBuffer(_vbo);
-        EffectGpuResources.For(_gl).ReleaseBuffer(_vbo);
-        EffectGpuResources.For(_gl).ReleaseTexture(_whiteTexture);
-        _gl.DeleteVertexArray(_vao);
+        _whiteTexture.Dispose();
+        _device.Resources.ReleaseTexture(_whiteTexture.Id);
     }
 }

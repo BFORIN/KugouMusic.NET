@@ -1,6 +1,6 @@
 using System.Numerics;
 using AvaloniaSilkEffects.Lumiere.Light;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Lumiere.Text;
 
@@ -19,7 +19,7 @@ internal sealed class LumiereEcho : IDisposable
     private const double BirthDistance = 0.08;
     private const double Prepare = 3;
 
-    private readonly GL _gl;
+    private readonly GpuDevice _gpu;
     private readonly float _width;
     private readonly float _height;
     private readonly float _fontPx;
@@ -55,10 +55,10 @@ internal sealed class LumiereEcho : IDisposable
         public LumiereGlyphLine? Layout;
     }
 
-    public LumiereEcho(GL gl, IReadOnlyList<LumiereLine> lines, float width, float height, string font, int weight,
+    public LumiereEcho(GpuDevice gpu, IReadOnlyList<LumiereLine> lines, float width, float height, string font, int weight,
         float resolution, string seed, double size, double opacity, IReadOnlyList<LumiereKeywordMatcher> keywords)
     {
-        _gl = gl;
+        _gpu = gpu;
         _width = width;
         _height = height;
         _fontPx = (float)(size * height);
@@ -121,7 +121,7 @@ internal sealed class LumiereEcho : IDisposable
 
     private void Rasterize(EchoLine line)
     {
-        var layout = new LumiereGlyphLine(_gl, line.Text, _fontPx, _font, _weight, _resolution,
+        var layout = new LumiereGlyphLine(_gpu, line.Text, _fontPx, _font, _weight, _resolution,
             letterSpacing: 0.04f, outline: 0.012f, maxCanvasPx: 4096);
         line.Layout = layout;
         for (var index = line.First; index < line.Last; index++)

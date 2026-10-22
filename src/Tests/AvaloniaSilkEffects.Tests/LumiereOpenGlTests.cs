@@ -137,10 +137,11 @@ public sealed class LumiereOpenGlTests
     {
         const int width = 640, height = 400;
         using var device = new EffectDevice(gl);
-        using var target = new EffectColorTarget(gl);
-        using var field = new LumiereLightField(gl);
+        using var target = device.Gpu.CreateRenderTarget(depthStencil: false);
+        using var field = new LumiereLightField(device.Gpu);
         target.EnsureSize(width, height);
-        target.Bind(clear: true);
+        device.Gpu.SetTarget(target);
+        device.Gpu.Clear(EffectColor.Transparent);
         // No fog modulation (tyndall = 1), no ambient, no glare: the pixel is exactly 1 − exp(−Σ mask).
         var rig = new LumiereLightRig(
             [
@@ -334,7 +335,7 @@ public sealed class LumiereOpenGlTests
     internal static IReadOnlyList<LumiereLine> CaptureLines() => [.. SonnetSceneCaptureTests.BuildLines().Select(line =>
         new LumiereLine(line.FullText, line.StartTime, line.EndTime, [.. line.Words.Select(word => new LumiereWord(word.Text, word.StartTime, word.EndTime))]))];
 
-    private static LumiereEffectScene CreateScene()
+    internal static LumiereEffectScene CreateScene()
     {
         var seamless = Environment.GetEnvironmentVariable("LUMIERE_CAPTURE_SEAMLESS") == "1";
         var program = LumiereProgramCompiler.Compile(CaptureLines(), "capture", 52, seamless);

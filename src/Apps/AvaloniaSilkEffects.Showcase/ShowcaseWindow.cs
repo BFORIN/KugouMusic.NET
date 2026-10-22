@@ -27,7 +27,7 @@ internal sealed class ShowcaseWindow : Window
         _scene = new SonnetShowcaseScene();
         _status = new TextBlock
         {
-            Text = "Waiting for the OpenGL compositor…",
+            Text = "Waiting for the GPU compositor…",
             Foreground = Brushes.LightGray,
             TextWrapping = TextWrapping.Wrap,
         };
@@ -51,6 +51,8 @@ internal sealed class ShowcaseWindow : Window
             DispatcherPriority.Background, (_, _) => RefreshStatistics());
         _statisticsTimer.Start();
         Closed += (_, _) => _statisticsTimer.Stop();
+        if (Environment.GetEnvironmentVariable("SHOWCASE_SNAPSHOT") is { Length: > 0 } snapshot)
+            DispatcherTimer.RunOnce(() => _ = SaveSnapshotAndExit(snapshot), TimeSpan.FromSeconds(4));
 
         var layout = new Grid
         {
@@ -82,7 +84,7 @@ internal sealed class ShowcaseWindow : Window
         });
         panel.Children.Add(new TextBlock
         {
-            Text = "OpenGL 3.3 kinetic graphics laboratory",
+            Text = "Metal · Vulkan · OpenGL kinetic graphics laboratory",
             Foreground = Brushes.Gray,
         });
         panel.Children.Add(_performance);
@@ -142,6 +144,19 @@ internal sealed class ShowcaseWindow : Window
             BorderThickness = new Thickness(1, 0, 0, 0),
             Child = new ScrollViewer { Content = panel },
         };
+    }
+
+    /// <summary>Saves what the compositor shows (imported GPU surfaces included) and exits; for backend checks.</summary>
+    private async Task SaveSnapshotAndExit(string path)
+    {
+        RefreshStatistics();
+        Console.WriteLine(_performance.Text);
+        if (Avalonia.Rendering.Composition.ElementComposition.GetElementVisual(this) is { } visual)
+        {
+            using var bitmap = await visual.Compositor.CreateCompositionVisualSnapshot(visual, 1);
+            bitmap.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+        }
+        Close();
     }
 
     private void RefreshStatistics()

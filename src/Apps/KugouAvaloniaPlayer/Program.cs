@@ -18,6 +18,7 @@ internal sealed class Program
     {
         CrashReporting.ConfigureLogging();
         CrashReporting.RegisterGlobalHandlers();
+        GraphicsBackendSelection.Initialize();
 
         var launchResult = StartupCoordinator.TryAcquireOrForward(args);
         if (launchResult == StartupInstanceLaunchResult.ForwardedToPrimary)
@@ -60,35 +61,28 @@ internal sealed class Program
             .WithInterFont()
             .LogToTrace();
 
+        // Native first (Metal / Vulkan), the previous OpenGL family as the fallback; see GraphicsBackendSelection.
+        var openGl = GraphicsBackendSelection.PreferOpenGl;
 #if KUGOU_MACOS
         builder = builder.With(new AvaloniaNativePlatformOptions
         {
-            RenderingMode =
-            [
-                AvaloniaNativeRenderingMode.OpenGl,
-                AvaloniaNativeRenderingMode.Metal,
-                AvaloniaNativeRenderingMode.Software,
-            ],
+            RenderingMode = openGl
+                ? [AvaloniaNativeRenderingMode.OpenGl, AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.Software]
+                : [AvaloniaNativeRenderingMode.Metal, AvaloniaNativeRenderingMode.OpenGl, AvaloniaNativeRenderingMode.Software],
         });
 #elif KUGOU_WINDOWS
         builder = builder.With(new Win32PlatformOptions
         {
-            RenderingMode =
-            [
-                Win32RenderingMode.AngleEgl,
-                Win32RenderingMode.Wgl,
-                Win32RenderingMode.Software,
-            ],
+            RenderingMode = openGl
+                ? [Win32RenderingMode.AngleEgl, Win32RenderingMode.Wgl, Win32RenderingMode.Software]
+                : [Win32RenderingMode.Vulkan, Win32RenderingMode.AngleEgl, Win32RenderingMode.Wgl, Win32RenderingMode.Software],
         });
 #elif KUGOU_LINUX
         builder = builder.With(new X11PlatformOptions
         {
-            RenderingMode =
-            [
-                X11RenderingMode.Egl,
-                X11RenderingMode.Glx,
-                X11RenderingMode.Software,
-            ],
+            RenderingMode = openGl
+                ? [X11RenderingMode.Egl, X11RenderingMode.Glx, X11RenderingMode.Software]
+                : [X11RenderingMode.Vulkan, X11RenderingMode.Egl, X11RenderingMode.Glx, X11RenderingMode.Software],
         });
 #endif
 

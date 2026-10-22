@@ -1,5 +1,5 @@
 using System.Numerics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Lumiere.Light;
 
@@ -103,21 +103,19 @@ internal sealed class LumiereBloom : IDisposable
         }
         """;
 
-    private readonly GL _gl;
-    private readonly EffectShaderProgram _down;
-    private readonly EffectShaderProgram _up;
-    private readonly EffectShaderProgram _combine;
-    private readonly uint _vao;
-    private readonly List<EffectColorTarget> _chain = [];
-    private readonly List<EffectColorTarget> _scratch = [];
+    private readonly GpuDevice _gpu;
+    private readonly GpuShader _down;
+    private readonly GpuShader _up;
+    private readonly GpuShader _combine;
+    private readonly List<GpuRenderTarget> _chain = [];
+    private readonly List<GpuRenderTarget> _scratch = [];
 
-    public LumiereBloom(GL gl)
+    public LumiereBloom(GpuDevice gpu)
     {
-        _gl = gl;
-        _down = new EffectShaderProgram(gl, Vertex, Down, "lumiere-bloom-down");
-        _up = new EffectShaderProgram(gl, Vertex, Up, "lumiere-bloom-up");
-        _combine = new EffectShaderProgram(gl, Vertex, Combine, "lumiere-bloom-combine");
-        _vao = gl.GenVertexArray();
+        _gpu = gpu;
+        _down = gpu.CreateShader(Vertex, Down, "lumiere-bloom-down");
+        _up = gpu.CreateShader(Vertex, Up, "lumiere-bloom-up");
+        _combine = gpu.CreateShader(Vertex, Combine, "lumiere-bloom-combine");
     }
 
     public int DrawCalls { get; private set; }
@@ -126,16 +124,15 @@ internal sealed class LumiereBloom : IDisposable
     /// Blooms <paramref name="source"/> and composites it (premultiplied over) onto <paramref name="output"/>.
     /// <paramref name="map"/> maps the output's 0..1 uv onto the source's uv (crop of an overscanned group).
     /// </summary>
-    public void Apply(EffectColorTarget source, LumiereBinding output, LumiereBloomPreset preset, float strengthScale,
+    public void Apply(GpuRenderTarget source, LumiereBinding output, LumiereBloomPreset preset, float strengthScale,
         Vector4 map, float alpha = 1, Vector3? tint = null)
     {
-        var gl = _gl;
-        using var timing = EffectGpuResources.For(_gl).MeasurePostProcess();
+        var gpu = _gpu;
+        using var timing = gpu.Resources.MeasurePostProcess();
         DrawCalls = 0;
-        gl.Disable(EnableCap.Blend);
-        gl.BindVertexArray(_vao);
+        gpu.SetBlend(GpuBlend.None);
         var strength = preset.Strength * strengthScale;
-        uint glowTexture = source.Texture;
+        var glowTexture = source.Texture!;
         if (strength > 0)
         {
             var width = source.Width;
@@ -143,72 +140,55 @@ internal sealed class LumiereBloom : IDisposable
             var count = Math.Max(1, Math.Min(8, preset.Levels));
             var built = 0;
             var input = source;
-            _down.Use();
-            gl.Uniform1(_down.Uniform("uTexture"), 0);
-            gl.ActiveTexture(TextureUnit.Texture0);
             for (var level = 1; level <= count; level++)
             {
                 var scale = 1.0 / (1 << level);
                 if (Math.Min(width, height) * scale < 2) break;
                 var target = Level(_chain, built++);
                 target.EnsureSize((int)Math.Ceiling(width * scale - 1e-6), (int)Math.Ceiling(height * scale - 1e-6));
-                target.Bind(false);
-                gl.BindTexture(TextureTarget.Texture2D, input.Texture);
-                gl.Uniform2(_down.Uniform("uTexel"), 1f / input.Width, 1f / input.Height);
-                gl.Uniform4(_down.Uniform("uParams"), preset.Threshold, preset.Knee, level == 1 ? 1 : 0, 0);
-                Draw();
+                gpu.SetTarget(target);
+                _down.SetTexture("uTexture", input.Texture);
+                _down.Set("uTexel", 1f / input.Width, 1f / input.Height);
+                _down.Set("uParams", preset.Threshold, preset.Knee, level == 1 ? 1 : 0, 0);
+                Draw(_down);
                 input = target;
             }
-
             var current = built > 0 ? _chain[built - 1] : source;
-            _up.Use();
-            gl.Uniform1(_up.Uniform("uTexture"), 0);
-            gl.Uniform1(_up.Uniform("uAdd"), 1);
-            gl.Uniform1(_up.Uniform("uSpread"), preset.Spread);
+            _up.Set("uSpread", preset.Spread);
             for (var index = built - 2; index >= 0; index--)
             {
                 var same = _chain[index];
                 var target = Level(_scratch, index);
                 target.EnsureSize(same.Width, same.Height);
-                target.Bind(false);
-                gl.ActiveTexture(TextureUnit.Texture0);
-                gl.BindTexture(TextureTarget.Texture2D, current.Texture);
-                gl.ActiveTexture(TextureUnit.Texture1);
-                gl.BindTexture(TextureTarget.Texture2D, same.Texture);
-                gl.Uniform2(_up.Uniform("uTexel"), 1f / current.Width, 1f / current.Height);
-                Draw();
+                gpu.SetTarget(target);
+                _up.SetTexture("uTexture", current.Texture);
+                _up.SetTexture("uAdd", same.Texture);
+                _up.Set("uTexel", 1f / current.Width, 1f / current.Height);
+                Draw(_up);
                 current = target;
             }
-            glowTexture = current.Texture;
+            glowTexture = current.Texture!;
         }
-
-        output.Restore(gl);
-        gl.Enable(EnableCap.Blend);
-        gl.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusSrcAlpha);
-        _combine.Use();
-        gl.Uniform1(_combine.Uniform("uTexture"), 0);
-        gl.Uniform1(_combine.Uniform("uAdd"), 1);
-        gl.Uniform4(_combine.Uniform("uMap"), map.X, map.Y, map.Z, map.W);
-        gl.Uniform1(_combine.Uniform("uStrength"), Math.Max(0, strength));
-        var color = tint ?? Vector3.One;
-        gl.Uniform3(_combine.Uniform("uTint"), color.X, color.Y, color.Z);
-        gl.Uniform1(_combine.Uniform("uAlpha"), alpha);
-        gl.ActiveTexture(TextureUnit.Texture1);
-        gl.BindTexture(TextureTarget.Texture2D, glowTexture);
-        gl.ActiveTexture(TextureUnit.Texture0);
-        gl.BindTexture(TextureTarget.Texture2D, source.Texture);
-        Draw();
+        output.Restore(gpu);
+        gpu.SetBlend(GpuBlend.Alpha);
+        _combine.Set("uMap", map);
+        _combine.Set("uStrength", Math.Max(0, strength));
+        _combine.Set("uTint", tint ?? Vector3.One);
+        _combine.Set("uAlpha", alpha);
+        _combine.SetTexture("uAdd", glowTexture);
+        _combine.SetTexture("uTexture", source.Texture);
+        Draw(_combine);
     }
 
-    private EffectColorTarget Level(List<EffectColorTarget> list, int index)
+    private GpuRenderTarget Level(List<GpuRenderTarget> list, int index)
     {
-        while (list.Count <= index) list.Add(new EffectColorTarget(_gl));
+        while (list.Count <= index) list.Add(_gpu.CreateRenderTarget(depthStencil: false));
         return list[index];
     }
 
-    private void Draw()
+    private void Draw(GpuShader shader)
     {
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+        _gpu.DrawFullscreen(shader);
         DrawCalls++;
     }
 
@@ -221,6 +201,5 @@ internal sealed class LumiereBloom : IDisposable
         _down.Dispose();
         _up.Dispose();
         _combine.Dispose();
-        _gl.DeleteVertexArray(_vao);
     }
 }

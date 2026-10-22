@@ -1,6 +1,5 @@
 using System.Numerics;
 using Avalonia;
-using Silk.NET.OpenGL;
 using AvaloniaSilkEffects.Tempera.Rendering;
 
 namespace AvaloniaSilkEffects.Tempera;
@@ -57,7 +56,6 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
     private Vector2 _logical;
     private int _activeIndex = -1;
     private bool _overlayDrawn;
-    private bool _isGles;
     private double _time;
 
     public TemperaSongContext Song { get; private set; } = song;
@@ -84,10 +82,9 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
     public override void Initialize(EffectDevice device)
     {
         base.Initialize(device);
-        _renderer = new TemperaRenderer(device.Gl, device.Primitives, device.Textures);
-        _main = new TemperaSurface(device.Gl);
-        _sceneSurface = new TemperaSurface(device.Gl);
-        _isGles = device.OpenGlVersion.Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
+        _renderer = new TemperaRenderer(device.Gpu, device.Primitives, device.Textures);
+        _main = new TemperaSurface(device.Gpu);
+        _sceneSurface = new TemperaSurface(device.Gpu);
     }
 
     public override void Resize(PixelSize pixelSize, double renderScaling)
@@ -295,13 +292,11 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
     public override void Render(EffectRenderContext context)
     {
         if (_renderer is null || _main is null || _sceneSurface is null || _logical.X <= 1) return;
-        var gl = Device.Gl;
+        var gpu = Device.Gpu;
         var primitives = context.Primitives;
         primitives.Flush();
-        gl.GetInteger(GetPName.DrawFramebufferBinding, out var outputFramebuffer);
-        Span<int> viewport = stackalloc int[4];
-        gl.GetInteger(GetPName.Viewport, viewport);
-        if (!_isGles) gl.Enable(EnableCap.Multisample);
+        var output = gpu.Target!;
+        var viewport = gpu.Viewport;
         _renderer.BeginFrame();
 
         var pixelScale = PixelScale;
@@ -336,8 +331,8 @@ public sealed class TemperaEffectScene(TemperaSongContext song, TemperaSceneOpti
         _renderer.Draw(_overlay.Container, _main, root);
 
         _main.Resolve();
-        gl.BindFramebuffer(FramebufferTarget.Framebuffer, (uint)outputFramebuffer);
-        gl.Viewport(viewport[0], viewport[1], (uint)viewport[2], (uint)viewport[3]);
+        gpu.SetTarget(output);
+        gpu.SetViewport(viewport);
         _renderer.Present(_main, width, height);
         primitives.RecordExternalDrawCalls(_renderer.DrawCalls);
         primitives.SetViewport(new Vector2(width, height));

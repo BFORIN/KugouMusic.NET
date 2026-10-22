@@ -1,3 +1,4 @@
+using AvaloniaSilkEffects.Gpu;
 using System.Numerics;
 using Avalonia;
 using AvaloniaSilkEffects.Lumiere.Light;
@@ -79,8 +80,8 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
     public override void Initialize(EffectDevice device)
     {
         base.Initialize(device);
-        _gpu = new LumiereGpu(device.Gl, device.Textures);
-        _compositor = new LumiereCompositor(device.Gl);
+        _gpu = new LumiereGpu(device.Gpu, device.Textures);
+        _compositor = new LumiereCompositor(device.Gpu);
     }
 
     public override void Resize(PixelSize pixelSize, double renderScaling)
@@ -239,8 +240,8 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
         if (_gpu is null || _compositor is null) return;
         var primitives = context.Primitives;
         primitives.Flush();
-        var gl = _gpu.Gl;
-        var output = LumiereBinding.Capture(gl);
+        var gpu = _gpu.Gpu;
+        var output = LumiereBinding.Capture(gpu);
         var pixelScale = PixelScale;
         var size = new Vector2(context.PixelSize.Width, context.PixelSize.Height);
         var dark = LumiereDarkField.Resolve(Song.Theme.Background, Options.Tuning.DarkField);
@@ -251,8 +252,8 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
         LumiereBinding LayerBinding()
         {
             layerTarget.EnsureSize(context.PixelSize.Width, context.PixelSize.Height);
-            layerTarget.Bind(clear: true);
-            return new LumiereBinding(layerTarget.Framebuffer, 0, 0, layerTarget.Width, layerTarget.Height);
+            _gpu.BindCleared(layerTarget);
+            return new LumiereBinding(layerTarget, new GpuRect(0, 0, layerTarget.Width, layerTarget.Height));
         }
 
         foreach (var layer in _layers)
@@ -280,12 +281,12 @@ public sealed class LumiereEffectScene(LumiereSongContext song, LumiereSceneOpti
             primitives.RecordExternalDrawCalls(_compositor.DrawCalls);
         }
 
-        output.Restore(gl);
+        output.Restore(gpu);
         var tuning = Options.Tuning;
         if (tuning.OverlayFrame && !tuning.TextOnly)
             _overlay.Draw(primitives, _logical.X, _logical.Y, pixelScale,
                 LumierePalette.Resolve(Song.Theme, tuning.ThemeColorMix).Light);
-        output.Restore(gl);
+        output.Restore(gpu);
         // Only the imminent cached paragraph, never an entire song. Visible text always has a synchronous fallback.
         var next = _activeIndex + 1;
         if (Options.EnableTextPrewarm && tuning.ShowText && next > 0 && next < Program.Paragraphs.Count &&

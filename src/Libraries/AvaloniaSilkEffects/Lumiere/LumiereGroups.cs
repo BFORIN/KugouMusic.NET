@@ -27,7 +27,7 @@ internal static class LumiereGroups
             var scale = groupScale * Math.Clamp(tuning.GraphicsScale, 0.25f, 1);
             var target = gpu.GraphicsTarget;
             target.EnsureSize((int)MathF.Ceiling((width + overscan * 2) * scale), (int)MathF.Ceiling((height + overscan * 2) * scale));
-            target.Bind(clear: true);
+            gpu.BindCleared(target);
             var viewport = new Vector2(target.Width, target.Height);
             primitives.SetViewport(viewport);
             graphics(camera * Matrix3x2.CreateTranslation(overscan, overscan) * Matrix3x2.CreateScale(scale), viewport);
@@ -42,7 +42,7 @@ internal static class LumiereGroups
         {
             var target = gpu.TextTarget;
             target.EnsureSize((int)MathF.Ceiling(width * groupScale), (int)MathF.Ceiling(height * groupScale));
-            target.Bind(clear: true);
+            gpu.BindCleared(target);
             var viewport = new Vector2(target.Width, target.Height);
             primitives.SetViewport(viewport);
             text(camera * Matrix3x2.CreateScale(groupScale), viewport);

@@ -1,5 +1,5 @@
 using System.Numerics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects;
 
@@ -204,66 +204,58 @@ internal sealed class PostProcessPipeline : IDisposable
         }
         """;
 
-    private readonly GL _gl;
-    private readonly EffectFramebuffer _source;
-    private readonly EffectFramebuffer _multisampleSource;
+    private readonly GpuDevice _device;
+    private readonly GpuRenderTarget _source;
+    private readonly GpuRenderTarget _multisampleSource;
     private readonly int _maxSamples;
-    private readonly bool _isGles;
     private const int BloomLevels = 6;
     private const int BlurLevels = 4;
-    private readonly EffectFramebuffer[] _bloomDown;
-    private readonly EffectFramebuffer[] _bloomUp;
-    private readonly EffectFramebuffer[] _blurDown;
-    private readonly EffectFramebuffer[] _blurUp;
-    private readonly EffectFramebuffer _streakPing;
-    private readonly EffectFramebuffer _streakPong;
-    private readonly EffectShaderProgram _downShader;
-    private readonly EffectShaderProgram _upShader;
-    private readonly EffectShaderProgram _streakShader;
-    private readonly EffectShaderProgram _compositeShader;
-    private readonly uint _vao;
-    private EffectFramebuffer? _sonnetPing;
-    private EffectFramebuffer? _sonnetPong;
-    private EffectShaderProgram? _sonnetShader;
-    private int _targetWidth;
-    private int _targetHeight;
+    private readonly GpuRenderTarget[] _bloomDown;
+    private readonly GpuRenderTarget[] _bloomUp;
+    private readonly GpuRenderTarget[] _blurDown;
+    private readonly GpuRenderTarget[] _blurUp;
+    private readonly GpuRenderTarget _streakPing;
+    private readonly GpuRenderTarget _streakPong;
+    private readonly GpuShader _downShader;
+    private readonly GpuShader _upShader;
+    private readonly GpuShader _streakShader;
+    private readonly GpuShader _compositeShader;
+    private GpuRenderTarget? _sonnetPing;
+    private GpuRenderTarget? _sonnetPong;
+    private GpuShader? _sonnetShader;
     private bool _usesOffscreen;
 
     public int FrameDrawCalls { get; private set; }
     public int MultisampleCount { get; private set; } = 1;
 
-    public PostProcessPipeline(GL gl)
+    public PostProcessPipeline(GpuDevice device)
     {
-        _gl = gl;
-        _source = new EffectFramebuffer(gl);
-        _multisampleSource = new EffectFramebuffer(gl);
-        gl.GetInteger(GLEnum.MaxSamples, out _maxSamples);
-        _isGles = gl.GetStringS(StringName.Version).Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
-        _bloomDown = CreateChain(gl, BloomLevels);
-        _bloomUp = CreateChain(gl, BloomLevels);
-        _blurDown = CreateChain(gl, BlurLevels);
-        _blurUp = CreateChain(gl, BlurLevels);
-        _streakPing = new EffectFramebuffer(gl);
-        _streakPong = new EffectFramebuffer(gl);
-        _downShader = new EffectShaderProgram(gl, FullscreenVertex, DownFragment, "effects-dual-down");
-        _upShader = new EffectShaderProgram(gl, FullscreenVertex, UpFragment, "effects-dual-up");
-        _streakShader = new EffectShaderProgram(gl, FullscreenVertex, StreakFragment, "effects-streak");
-        _compositeShader = new EffectShaderProgram(gl, FullscreenVertex, CompositeFragment, "effects-composite");
-        _vao = gl.GenVertexArray();
+        _device = device;
+        _source = device.CreateRenderTarget(depthStencil: true);
+        _multisampleSource = device.CreateRenderTarget(depthStencil: true);
+        _maxSamples = device.MaxSamples;
+        _bloomDown = CreateChain(device, BloomLevels);
+        _bloomUp = CreateChain(device, BloomLevels);
+        _blurDown = CreateChain(device, BlurLevels);
+        _blurUp = CreateChain(device, BlurLevels);
+        _streakPing = device.CreateRenderTarget(depthStencil: true);
+        _streakPong = device.CreateRenderTarget(depthStencil: true);
+        _downShader = device.CreateShader(FullscreenVertex, DownFragment, "effects-dual-down");
+        _upShader = device.CreateShader(FullscreenVertex, UpFragment, "effects-dual-up");
+        _streakShader = device.CreateShader(FullscreenVertex, StreakFragment, "effects-streak");
+        _compositeShader = device.CreateShader(FullscreenVertex, CompositeFragment, "effects-composite");
     }
 
+    /// <summary>Binds the scene's render target (the output, or an offscreen source) and clears it.</summary>
     public void Begin(
         int width,
         int height,
-        int targetFramebuffer,
         EffectColor clearColor,
         bool enabled,
         float resolutionScale,
         int multisampleCount = 1)
     {
         FrameDrawCalls = 0;
-        _targetWidth = width;
-        _targetHeight = height;
         var samples = Math.Clamp(multisampleCount, 1, Math.Max(1, _maxSamples));
         _usesOffscreen = enabled || samples > 1;
         MultisampleCount = 1;
@@ -280,40 +272,36 @@ internal sealed class PostProcessPipeline : IDisposable
         {
             _multisampleSource.EnsureSize(renderWidth, renderHeight, samples);
             MultisampleCount = _multisampleSource.Samples;
-            // GLES always rasterizes multisampled attachments with MSAA; it has
-            // no GL_MULTISAMPLE capability. Desktop GL needs this per-frame state.
-            if (!_isGles) _gl.Enable(EnableCap.Multisample);
         }
         else
-            _multisampleSource.Dispose();
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer,
-            samples > 1 ? _multisampleSource.Framebuffer : _usesOffscreen ? _source.Framebuffer : (uint)targetFramebuffer);
-        _gl.Viewport(0, 0, (uint)renderWidth, (uint)renderHeight);
-        var clear = clearColor.Premultiplied();
-        _gl.ClearColor(clear.R, clear.G, clear.B, clear.A);
-        _gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.StencilBufferBit);
+            _multisampleSource.Release();
+        if (samples > 1) _device.SetTarget(_multisampleSource);
+        else if (_usesOffscreen) _device.SetTarget(_source);
+        _device.SetViewport(new GpuRect(0, 0, renderWidth, renderHeight));
+        _device.Clear(clearColor.Premultiplied(), stencil: true);
     }
 
-    public unsafe void End(int targetFramebuffer, PostProcessSettings settings)
+    public void End(GpuRenderTarget output, PostProcessSettings settings)
     {
         if (!_usesOffscreen)
             return;
 
-        _gl.Disable(EnableCap.Blend);
-        _gl.Disable(EnableCap.ScissorTest);
-        _gl.Disable(EnableCap.StencilTest);
+        var device = _device;
+        device.SetBlend(GpuBlend.None);
+        device.SetScissor(null);
+        device.SetStencil(GpuStencil.Disabled);
+        device.SetColorWrite(true);
         // Resolve geometry before any filter samples it. Fullscreen filters
         // then preserve coverage, including premultiplied RGB and alpha.
         if (MultisampleCount > 1)
-            _multisampleSource.ResolveTo(_source);
-        _gl.BindVertexArray(_vao);
+            device.Resolve(_multisampleSource, _source);
 
-        var sourceTexture = _source.Texture;
+        var sourceTexture = _source.Texture!;
         if (settings.UseSonnetPasses)
         {
-            _sonnetShader ??= new EffectShaderProgram(_gl, FullscreenVertex, Sonnet.SonnetFilterShader.Fragment, "sonnet-material");
-            _sonnetPing ??= new EffectFramebuffer(_gl);
-            _sonnetPong ??= new EffectFramebuffer(_gl);
+            _sonnetShader ??= device.CreateShader(FullscreenVertex, Sonnet.SonnetFilterShader.Fragment, "sonnet-material");
+            _sonnetPing ??= device.CreateRenderTarget(depthStencil: true);
+            _sonnetPong ??= device.CreateRenderTarget(depthStencil: true);
             ReadOnlySpan<float> amounts = [settings.LensDistortion, settings.Grain, settings.Contrast,
                 settings.RgbSplit, settings.Halftone, settings.Vignette];
             var count = 0;
@@ -322,18 +310,16 @@ internal sealed class PostProcessPipeline : IDisposable
                 if (amounts[pass] <= 0 && !(pass == 0 && settings.LensDispersion > 0)) continue;
                 var destination = count++ % 2 == 0 ? _sonnetPing : _sonnetPong;
                 destination.EnsureSize(_source.Width, _source.Height);
-                _gl.BindFramebuffer(FramebufferTarget.Framebuffer, destination.Framebuffer);
-                _gl.Viewport(0, 0, (uint)_source.Width, (uint)_source.Height);
-                _sonnetShader.Use();
-                BindTexture(_sonnetShader, "uTexture", sourceTexture, TextureUnit.Texture0, 0);
-                _gl.Uniform2(_sonnetShader.Uniform("uResolution"), (float)_source.Width, (float)_source.Height);
-                _gl.Uniform1(_sonnetShader.Uniform("uPass"), pass);
-                _gl.Uniform1(_sonnetShader.Uniform("uAmount"), amounts[pass]);
-                _gl.Uniform1(_sonnetShader.Uniform("uDispersion"), settings.LensDispersion);
-                _gl.Uniform1(_sonnetShader.Uniform("uSeed"), settings.SonnetNoiseSeed);
-                _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+                device.SetTarget(destination);
+                _sonnetShader.SetTexture("uTexture", sourceTexture);
+                _sonnetShader.Set("uResolution", (float)_source.Width, (float)_source.Height);
+                _sonnetShader.Set("uPass", pass);
+                _sonnetShader.Set("uAmount", amounts[pass]);
+                _sonnetShader.Set("uDispersion", settings.LensDispersion);
+                _sonnetShader.Set("uSeed", settings.SonnetNoiseSeed);
+                device.DrawFullscreen(_sonnetShader);
                 FrameDrawCalls++;
-                sourceTexture = destination.Texture;
+                sourceTexture = destination.Texture!;
             }
         }
 
@@ -357,48 +343,45 @@ internal sealed class PostProcessPipeline : IDisposable
             bloomTexture = DualFilter(sourceTexture, _source.Width, _source.Height, _bloomDown, _bloomUp,
                 BloomLevels, prefilter: true, Math.Clamp(settings.BloomThreshold, 0, 1),
                 spread: 1, scatter: 0.45f + radius * 0.45f);
-            if (settings.BloomStreak > 0.001f && _bloomDown[1].Framebuffer != 0)
+            if (settings.BloomStreak > 0.001f && _bloomDown[1].IsAllocated)
                 streakTexture = Streak(_bloomDown[1]);
         }
 
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, (uint)targetFramebuffer);
-        _gl.Viewport(0, 0, (uint)_targetWidth, (uint)_targetHeight);
-        _compositeShader.Use();
-        BindTexture(_compositeShader, "uSource", sourceTexture, TextureUnit.Texture0, 0);
-        BindTexture(_compositeShader, "uBlurred", blurredTexture, TextureUnit.Texture1, 1);
-        BindTexture(_compositeShader, "uBloomTexture", bloomTexture, TextureUnit.Texture2, 2);
-        BindTexture(_compositeShader, "uStreakTexture", streakTexture, TextureUnit.Texture3, 3);
-        Set("uBloom", bloomEnabled ? settings.Bloom : 0);
-        Set("uStreak", bloomEnabled && settings.BloomStreak > 0.001f ? settings.BloomStreak : 0);
-        _gl.Uniform3(_compositeShader.Uniform("uBloomTint"), settings.BloomTint.R, settings.BloomTint.G, settings.BloomTint.B);
-        Set("uZoomBlur", Math.Clamp(settings.ZoomBlur, 0, 2));
-        _gl.Uniform2(_compositeShader.Uniform("uZoomCenter"), settings.ZoomBlurCenter.X, 1 - settings.ZoomBlurCenter.Y);
-        _gl.Uniform2(_compositeShader.Uniform("uResolution"), (float)_source.Width, (float)_source.Height);
-        Set("uBlur", settings.Blur);
-        Set("uGlow", settings.Glow);
-        Set("uGrain", settings.UseSonnetPasses ? 0 : settings.Grain);
-        Set("uContrast", settings.UseSonnetPasses ? 0 : settings.Contrast);
-        Set("uRgbSplit", settings.UseSonnetPasses ? 0 : settings.RgbSplit);
-        Set("uHalftone", settings.UseSonnetPasses ? 0 : settings.Halftone);
-        Set("uVignette", settings.UseSonnetPasses ? 0 : settings.Vignette);
-        Set("uLensDistortion", settings.UseSonnetPasses ? 0 : settings.LensDistortion);
-        Set("uLensDispersion", settings.UseSonnetPasses ? 0 : settings.LensDispersion);
-        Set("uGlitch", settings.Glitch);
-        _gl.Uniform1(_compositeShader.Uniform("uMonoGlitch"), settings.UseSonnetPasses ? 1 : 0);
-        Set("uTime", settings.Time);
-        Set("uSeed", settings.Seed);
-        var matrix = settings.ColorMatrix;
-        _gl.UniformMatrix4(_compositeShader.Uniform("uColorMatrix"), 1, true, (float*)&matrix);
-        _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+        device.SetTarget(output);
+        var shader = _compositeShader;
+        shader.SetTexture("uSource", sourceTexture);
+        shader.SetTexture("uBlurred", blurredTexture);
+        shader.SetTexture("uBloomTexture", bloomTexture);
+        shader.SetTexture("uStreakTexture", streakTexture);
+        shader.Set("uBloom", bloomEnabled ? settings.Bloom : 0);
+        shader.Set("uStreak", bloomEnabled && settings.BloomStreak > 0.001f ? settings.BloomStreak : 0);
+        shader.Set("uBloomTint", settings.BloomTint.R, settings.BloomTint.G, settings.BloomTint.B);
+        shader.Set("uZoomBlur", Math.Clamp(settings.ZoomBlur, 0, 2));
+        shader.Set("uZoomCenter", settings.ZoomBlurCenter.X, 1 - settings.ZoomBlurCenter.Y);
+        shader.Set("uResolution", (float)_source.Width, (float)_source.Height);
+        shader.Set("uBlur", settings.Blur);
+        shader.Set("uGlow", settings.Glow);
+        shader.Set("uGrain", settings.UseSonnetPasses ? 0 : settings.Grain);
+        shader.Set("uContrast", settings.UseSonnetPasses ? 0 : settings.Contrast);
+        shader.Set("uRgbSplit", settings.UseSonnetPasses ? 0 : settings.RgbSplit);
+        shader.Set("uHalftone", settings.UseSonnetPasses ? 0 : settings.Halftone);
+        shader.Set("uVignette", settings.UseSonnetPasses ? 0 : settings.Vignette);
+        shader.Set("uLensDistortion", settings.UseSonnetPasses ? 0 : settings.LensDistortion);
+        shader.Set("uLensDispersion", settings.UseSonnetPasses ? 0 : settings.LensDispersion);
+        shader.Set("uGlitch", settings.Glitch);
+        shader.Set("uMonoGlitch", settings.UseSonnetPasses ? 1 : 0);
+        shader.Set("uTime", settings.Time);
+        shader.Set("uSeed", settings.Seed);
+        shader.SetMatrixTransposed("uColorMatrix", settings.ColorMatrix);
+        device.DrawFullscreen(shader);
         FrameDrawCalls++;
-        _gl.ActiveTexture(TextureUnit.Texture0);
     }
 
-    private static EffectFramebuffer[] CreateChain(GL gl, int levels)
+    private static GpuRenderTarget[] CreateChain(GpuDevice device, int levels)
     {
-        var chain = new EffectFramebuffer[levels];
+        var chain = new GpuRenderTarget[levels];
         for (var index = 0; index < levels; index++)
-            chain[index] = new EffectFramebuffer(gl);
+            chain[index] = device.CreateRenderTarget(depthStencil: true);
         return chain;
     }
 
@@ -406,87 +389,71 @@ internal sealed class PostProcessPipeline : IDisposable
     /// Runs a dual-filter pyramid starting at half resolution and returns the
     /// texture of the finest upsampled level.
     /// </summary>
-    private uint DualFilter(uint source, int width, int height, EffectFramebuffer[] down, EffectFramebuffer[] up,
+    private GpuTexture DualFilter(GpuTexture source, int width, int height, GpuRenderTarget[] down, GpuRenderTarget[] up,
         int levels, bool prefilter, float threshold, float spread, float scatter)
     {
         var input = source;
         var inputWidth = width;
         var inputHeight = height;
         var used = 0;
-        _downShader.Use();
-        _gl.Uniform1(_downShader.Uniform("uThreshold"), threshold);
-        _gl.Uniform1(_downShader.Uniform("uKnee"), MathF.Max(0.04f, (1 - threshold) * 0.5f));
+        _downShader.Set("uThreshold", threshold);
+        _downShader.Set("uKnee", MathF.Max(0.04f, (1 - threshold) * 0.5f));
         for (var level = 0; level < levels; level++)
         {
             var levelWidth = Math.Max(1, inputWidth / 2);
             var levelHeight = Math.Max(1, inputHeight / 2);
             down[level].EnsureSize(levelWidth, levelHeight);
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, down[level].Framebuffer);
-            _gl.Viewport(0, 0, (uint)levelWidth, (uint)levelHeight);
-            BindTexture(_downShader, "uTexture", input, TextureUnit.Texture0, 0);
-            _gl.Uniform2(_downShader.Uniform("uHalfTexel"), 0.5f / inputWidth, 0.5f / inputHeight);
-            _gl.Uniform1(_downShader.Uniform("uPrefilter"), prefilter && level == 0 ? 1 : 0);
-            _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            _device.SetTarget(down[level]);
+            _downShader.SetTexture("uTexture", input);
+            _downShader.Set("uHalfTexel", 0.5f / inputWidth, 0.5f / inputHeight);
+            _downShader.Set("uPrefilter", prefilter && level == 0 ? 1 : 0);
+            _device.DrawFullscreen(_downShader);
             FrameDrawCalls++;
-            input = down[level].Texture;
+            input = down[level].Texture!;
             inputWidth = levelWidth;
             inputHeight = levelHeight;
             used++;
             if (levelWidth <= 8 || levelHeight <= 8) break;
         }
 
-        _upShader.Use();
-        _gl.Uniform1(_upShader.Uniform("uSpread"), spread);
-        _gl.Uniform1(_upShader.Uniform("uScatter"), scatter);
+        _upShader.Set("uSpread", spread);
+        _upShader.Set("uScatter", scatter);
         var lower = down[used - 1];
         for (var level = used - 2; level >= 0; level--)
         {
             var target = up[level];
             target.EnsureSize(down[level].Width, down[level].Height);
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, target.Framebuffer);
-            _gl.Viewport(0, 0, (uint)target.Width, (uint)target.Height);
-            BindTexture(_upShader, "uTexture", lower.Texture, TextureUnit.Texture0, 0);
-            BindTexture(_upShader, "uBase", down[level].Texture, TextureUnit.Texture1, 1);
-            _gl.Uniform2(_upShader.Uniform("uHalfTexel"), 0.5f / lower.Width, 0.5f / lower.Height);
-            _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            _device.SetTarget(target);
+            _upShader.SetTexture("uTexture", lower.Texture);
+            _upShader.SetTexture("uBase", down[level].Texture);
+            _upShader.Set("uHalfTexel", 0.5f / lower.Width, 0.5f / lower.Height);
+            _device.DrawFullscreen(_upShader);
             FrameDrawCalls++;
             lower = target;
         }
-        return lower.Texture;
+        return lower.Texture!;
     }
 
-    private uint Streak(EffectFramebuffer bright)
+    private GpuTexture Streak(GpuRenderTarget bright)
     {
         // Squash vertically so a few horizontal taps cover a wide, thin flare.
         var width = Math.Max(1, bright.Width / 2);
         var height = Math.Max(1, bright.Height / 6);
         _streakPing.EnsureSize(width, height);
         _streakPong.EnsureSize(width, height);
-        _streakShader.Use();
-        var input = bright.Texture;
+        var input = bright.Texture!;
         ReadOnlySpan<float> steps = [1, 3, 9, 27];
         for (var pass = 0; pass < steps.Length; pass++)
         {
             var target = pass % 2 == 0 ? _streakPing : _streakPong;
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, target.Framebuffer);
-            _gl.Viewport(0, 0, (uint)width, (uint)height);
-            BindTexture(_streakShader, "uTexture", input, TextureUnit.Texture0, 0);
-            _gl.Uniform2(_streakShader.Uniform("uStep"), steps[pass] / width, 0f);
-            _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+            _device.SetTarget(target);
+            _streakShader.SetTexture("uTexture", input);
+            _streakShader.Set("uStep", steps[pass] / width, 0f);
+            _device.DrawFullscreen(_streakShader);
             FrameDrawCalls++;
-            input = target.Texture;
+            input = target.Texture!;
         }
         return input;
-    }
-
-    private void Set(string uniform, float value) =>
-        _gl.Uniform1(_compositeShader.Uniform(uniform), value);
-
-    private void BindTexture(EffectShaderProgram shader, string uniform, uint texture, TextureUnit unit, int index)
-    {
-        _gl.ActiveTexture(unit);
-        _gl.BindTexture(TextureTarget.Texture2D, texture);
-        _gl.Uniform1(shader.Uniform(uniform), index);
     }
 
     public void Dispose()
@@ -494,15 +461,14 @@ internal sealed class PostProcessPipeline : IDisposable
         _sonnetShader?.Dispose();
         _sonnetPing?.Dispose();
         _sonnetPong?.Dispose();
-        _gl.DeleteVertexArray(_vao);
         _downShader.Dispose();
         _upShader.Dispose();
         _streakShader.Dispose();
         _compositeShader.Dispose();
         _source.Dispose();
         _multisampleSource.Dispose();
-        foreach (var framebuffer in _bloomDown.Concat(_bloomUp).Concat(_blurDown).Concat(_blurUp))
-            framebuffer.Dispose();
+        foreach (var target in _bloomDown.Concat(_bloomUp).Concat(_blurDown).Concat(_blurUp))
+            target.Dispose();
         _streakPing.Dispose();
         _streakPong.Dispose();
     }

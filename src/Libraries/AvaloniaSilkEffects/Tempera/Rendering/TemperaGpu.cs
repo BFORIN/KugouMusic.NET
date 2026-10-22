@@ -1,16 +1,18 @@
 using System.Numerics;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Tempera.Rendering;
 
 /// <summary>A Graphics node's geometry on the GPU: interleaved (x, y, ramp) vertices and a uint index buffer, uploaded once.</summary>
-internal sealed class TemperaMeshBuffer(GL gl) : IDisposable
+internal sealed class TemperaMeshBuffer(GpuDevice gpu) : IDisposable
 {
-    public uint Vao { get; private set; }
-    public uint Vbo { get; private set; }
-    public uint Ibo { get; private set; }
+    public static readonly GpuVertexLayout Layout = new(3 * sizeof(float),
+        new GpuVertexAttribute(0, 2, 0), new GpuVertexAttribute(1, 1, 2 * sizeof(float)));
 
-    public unsafe void Upload(TemperaGraphic graphic)
+    public GpuBuffer? Vertices { get; private set; }
+    public GpuBuffer? Indices { get; private set; }
+
+    public void Upload(TemperaGraphic graphic)
     {
         var vertexCount = graphic.Parts.Sum(part => part.Positions.Length / 2);
         var indexCount = graphic.Parts.Sum(part => part.Indices.Length);
@@ -33,35 +35,16 @@ internal sealed class TemperaMeshBuffer(GL gl) : IDisposable
             vertexOffset += count;
             indexOffset += part.Indices.Length;
         }
-        Vao = gl.GenVertexArray();
-        Vbo = gl.GenBuffer();
-        Ibo = gl.GenBuffer();
-        gl.BindVertexArray(Vao);
-        gl.BindBuffer(BufferTargetARB.ArrayBuffer, Vbo);
-        fixed (float* data = vertices)
-            gl.BufferData(BufferTargetARB.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), data, BufferUsageARB.StaticDraw);
-        gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, Ibo);
-        fixed (uint* data = indices)
-            gl.BufferData(BufferTargetARB.ElementArrayBuffer, (nuint)(indices.Length * sizeof(uint)), data, BufferUsageARB.StaticDraw);
-        gl.VertexAttribPointer(0, 2, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
-        gl.EnableVertexAttribArray(0);
-        gl.VertexAttribPointer(1, 1, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)(2 * sizeof(float)));
-        gl.EnableVertexAttribArray(1);
-        gl.BindVertexArray(0);
-        var resources = EffectGpuResources.For(gl);
-        resources.Buffer(Vbo, (long)vertices.Length * sizeof(float));
-        resources.Buffer(Ibo, (long)indices.Length * sizeof(uint));
-        resources.Uploaded((long)vertices.Length * sizeof(float) + (long)indices.Length * sizeof(uint));
+        // Empty buffers are not valid in every API; a part list without geometry never draws.
+        Vertices = gpu.CreateBuffer<float>(vertices.Length == 0 ? new float[3] : vertices);
+        Indices = gpu.CreateBuffer<uint>(indices.Length == 0 ? new uint[1] : indices, index: true);
     }
 
     public void Dispose()
     {
-        if (Vao != 0) gl.DeleteVertexArray(Vao);
-        if (Vbo != 0) gl.DeleteBuffer(Vbo);
-        if (Ibo != 0) gl.DeleteBuffer(Ibo);
-        EffectGpuResources.For(gl).ReleaseBuffer(Vbo);
-        EffectGpuResources.For(gl).ReleaseBuffer(Ibo);
-        Vao = Vbo = Ibo = 0;
+        Vertices?.Dispose();
+        Indices?.Dispose();
+        Vertices = Indices = null;
     }
 }
 
@@ -69,17 +52,17 @@ internal sealed class TemperaMeshBuffer(GL gl) : IDisposable
 /// A multisampled drawing surface (Pixi's canvas runs <c>antialias: true</c>, and its Graphics have no other edge AA) with a
 /// single-sample resolve that doubles as the backdrop copy the inversion filter reads.
 /// </summary>
-internal sealed class TemperaSurface(GL gl) : IDisposable
+internal sealed class TemperaSurface(GpuDevice gpu) : IDisposable
 {
-    private readonly EffectFramebuffer _multisample = new(gl);
-    private readonly EffectFramebuffer _resolve = new(gl);
-    private int _samples = 4;
+    private readonly GpuRenderTarget _multisample = gpu.CreateRenderTarget(depthStencil: true);
+    private readonly GpuRenderTarget _resolve = gpu.CreateRenderTarget(depthStencil: true);
+    private int _samples = Math.Min(4, gpu.MaxSamples);
 
     public int Width => _resolve.Width;
     public int Height => _resolve.Height;
     /// <summary>Device pixels per logical pixel for content drawn here.</summary>
     public float Scale { get; private set; } = 1;
-    public uint ResolvedTexture => _resolve.Texture;
+    public GpuTexture ResolvedTexture => _resolve.Texture!;
 
     public void EnsureSize(int width, int height, float scale)
     {
@@ -98,28 +81,21 @@ internal sealed class TemperaSurface(GL gl) : IDisposable
         }
     }
 
-    public void Bind()
-    {
-        gl.BindFramebuffer(FramebufferTarget.Framebuffer, _multisample.Framebuffer);
-        gl.Viewport(0, 0, (uint)Width, (uint)Height);
-    }
+    public void Bind() => gpu.SetTarget(_multisample);
 
     public void Clear()
     {
         Bind();
-        gl.Disable(EnableCap.ScissorTest);
-        gl.ClearColor(0, 0, 0, 0);
-        gl.Clear(ClearBufferMask.ColorBufferBit);
+        gpu.SetScissor(null);
+        gpu.Clear(EffectColor.Transparent);
     }
 
     /// <summary>Resolves what is drawn so far into <see cref="ResolvedTexture"/> and binds the drawing surface again.</summary>
-    public uint Resolve()
+    public GpuTexture Resolve()
     {
-        gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _multisample.Framebuffer);
-        gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _resolve.Framebuffer);
-        gl.BlitFramebuffer(0, 0, Width, Height, 0, 0, Width, Height, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
+        gpu.Resolve(_multisample, _resolve);
         Bind();
-        return _resolve.Texture;
+        return _resolve.Texture!;
     }
 
     public void Dispose()
@@ -149,4 +125,6 @@ internal readonly record struct TemperaPixelRect(int X, int Y, int Width, int He
 
     /// <summary>The same rectangle in GL's bottom-left space for a target of <paramref name="targetHeight"/>.</summary>
     public Vector4 ToGl(int targetHeight) => new(X, targetHeight - (Y + Height), Width, Height);
+
+    public GpuRect ToGpu(int targetHeight) => new(X, targetHeight - (Y + Height), Width, Height);
 }

@@ -1,6 +1,6 @@
 using System.Numerics;
 using AvaloniaSilkEffects.Lumiere.Light;
-using Silk.NET.OpenGL;
+using AvaloniaSilkEffects.Gpu;
 
 namespace AvaloniaSilkEffects.Lumiere.Text;
 
@@ -95,7 +95,7 @@ internal sealed class LumiereLyricWindow : IDisposable
         _ => 0.6,
     };
 
-    private readonly GL _gl;
+    private readonly GpuDevice _gpu;
     private readonly LumiereLyricWindowOptions _options;
     private readonly double _height;
     private readonly LumiereRegion _region;
@@ -170,9 +170,9 @@ internal sealed class LumiereLyricWindow : IDisposable
         public double X, Y, Cos = 1, Sin, HalfW, HalfH, Margin = 1, Weight;
     }
 
-    public LumiereLyricWindow(GL gl, LumiereLyricWindowOptions options)
+    public LumiereLyricWindow(GpuDevice gpu, LumiereLyricWindowOptions options)
     {
-        _gl = gl;
+        _gpu = gpu;
         _options = options;
         _height = options.Height;
         _region = options.Region;
@@ -232,7 +232,7 @@ internal sealed class LumiereLyricWindow : IDisposable
         var line = meta.Line;
         var rng = LumiereRng.At($"{_options.Seed}:window", meta.RandomOffset);
         // Glyph textures at the largest word scale; enlarged words only shrink.
-        var layout = new LumiereGlyphLine(_gl, line.Text, (float)(_heroPx * LumiereWordStyle.MaxWordScale), _options.Font,
+        var layout = new LumiereGlyphLine(_gpu, line.Text, (float)(_heroPx * LumiereWordStyle.MaxWordScale), _options.Font,
             _options.Weight, _options.Resolution, (float)_options.LetterSpacing);
         var words = LumiereWords.Segment(line.Text);
         var wordSeed = $"{_options.Seed}:{index}:{line.Text}";
