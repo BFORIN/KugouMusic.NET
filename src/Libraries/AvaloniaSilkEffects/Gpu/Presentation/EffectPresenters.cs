@@ -157,7 +157,7 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
     private readonly Compositor _compositor;
     private readonly CompositionSurfaceVisual _surfaceVisual;
     private readonly Action _update;
-    private readonly List<SwapchainImage> _images = [];
+    private readonly EffectSwapchain _images;
     private SwapchainImage? _drawing;
     private bool _queued;
     private bool _disposed;
@@ -175,6 +175,7 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
         _surfaceVisual.Size = new(visual.Bounds.Width, visual.Bounds.Height);
         ElementComposition.SetElementChildVisual(visual, _surfaceVisual);
         _update = Update;
+        _images = new EffectSwapchain(CreateImage);
     }
 
     protected IEffectPresenterHost Host { get; }
@@ -203,7 +204,7 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
             {
                 // Hidden: keep the device, give back the scene's objects and the swapchain memory.
                 Host.ReleaseDeviceResources();
-                ReleaseImages(force: false);
+                _images.Release(force: false);
                 return;
             }
             _drawing = null;
@@ -213,7 +214,6 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
                 // An acquired image has its synchronization queued on the GPU; it must be handed over even if
                 // nothing was drawn, so the compositor's wait and our next reuse stay balanced.
                 image.Present(drawn);
-                _images.Add(image);
             }
         }
         catch (Exception exception)
@@ -224,42 +224,14 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
 
     private GpuRenderTarget? Acquire(PixelSize size)
     {
-        SwapchainImage? found = null;
-        var ready = 0;
-        for (var index = _images.Count - 1; index >= 0; index--)
-        {
-            var image = _images[index];
-            var isReady = image.LastPresent is null || image.LastPresent.IsCompletedSuccessfully;
-            if (image.LastPresent?.IsFaulted == true || isReady && image.Size != size)
-            {
-                image.Dispose();
-                _images.RemoveAt(index);
-                continue;
-            }
-            if (!isReady) continue;
-            ready++;
-            found ??= image;
-        }
-        // Keep one ready image of this size spare while another is in flight, so the UI thread never waits.
-        var next = ready >= 2 ? found! : CreateImage(size);
-        _images.Remove(next);
+        var next = _images.Acquire(size);
+        if (next is null) return null;
         next.BeginDraw();
         _drawing = next;
         return next.Target;
     }
 
     protected abstract SwapchainImage CreateImage(PixelSize size);
-
-    private void ReleaseImages(bool force)
-    {
-        for (var index = _images.Count - 1; index >= 0; index--)
-        {
-            var image = _images[index];
-            if (!force && image.LastPresent is { IsCompleted: false }) continue;
-            image.Dispose();
-            _images.RemoveAt(index);
-        }
-    }
 
     public void Dispose()
     {
@@ -271,7 +243,7 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
         {
             // The compositor may still read in-flight images; wait for the GPU before freeing them.
             WaitIdle();
-            ReleaseImages(force: true);
+            _images.Release(force: true);
             Surface.Dispose();
             DisposeDevice();
         }
@@ -279,15 +251,4 @@ internal abstract class CompositionEffectPresenter : IEffectPresenter
 
     protected abstract void WaitIdle();
     protected abstract void DisposeDevice();
-
-    protected abstract class SwapchainImage(PixelSize size) : IDisposable
-    {
-        public PixelSize Size { get; } = size;
-        public Task? LastPresent { get; protected set; }
-        public abstract GpuRenderTarget Target { get; }
-        /// <summary>Queues the GPU wait for the compositor's release and the signal for this frame.</summary>
-        public abstract void BeginDraw();
-        public abstract void Present(bool drawn);
-        public abstract void Dispose();
-    }
 }

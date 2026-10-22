@@ -15,7 +15,9 @@ internal sealed unsafe class MetalGpuDevice : GpuDevice
 {
     internal const nint PixelFormatRgba8 = 70;
     internal const nint PixelFormatBgra8 = 80;
-    internal const nint PixelFormatDepth32Stencil8 = 260;
+    // Scenes use stencil masks, never depth testing/writes. A separate S8 attachment
+    // preserves those masks without allocating an unused depth plane (including MSAA).
+    internal const nint PixelFormatStencil8 = 253;
     private const int InlineBytesLimit = 4096;
 
     private const string ClearSource = """
@@ -403,12 +405,8 @@ internal sealed unsafe class MetalGpuDevice : GpuDevice
         Call(color, "setStoreAction:", 1);
         if (target.HasDepthStencil)
         {
-            var depth = Call(pass, "depthAttachment");
-            Call(depth, "setTexture:", target.DepthStencilTexture);
-            Call(depth, "setLoadAction:", 0);
-            Call(depth, "setStoreAction:", 0);
             var stencil = Call(pass, "stencilAttachment");
-            Call(stencil, "setTexture:", target.DepthStencilTexture);
+            Call(stencil, "setTexture:", target.StencilTexture);
             Call(stencil, "setLoadAction:", target.PendingStencil || !target.StencilInitialized ? 2 : 1);
             Call(stencil, "setClearStencil:", 0);
             Call(stencil, "setStoreAction:", 1);
@@ -492,8 +490,7 @@ internal sealed unsafe class MetalGpuDevice : GpuDevice
             }
             if (key.HasDepthStencil)
             {
-                Call(descriptor, "setDepthAttachmentPixelFormat:", PixelFormatDepth32Stencil8);
-                Call(descriptor, "setStencilAttachmentPixelFormat:", PixelFormatDepth32Stencil8);
+                Call(descriptor, "setStencilAttachmentPixelFormat:", PixelFormatStencil8);
             }
             if (key.Layout is { } layout)
             {
@@ -754,7 +751,7 @@ internal sealed class MetalRenderTarget : GpuRenderTarget
         ColorTexture = texture;
         Width = width;
         Height = height;
-        DepthStencilTexture = device.NewTexture(width, height, MetalGpuDevice.PixelFormatDepth32Stencil8, 1, renderTarget: true);
+        StencilTexture = device.NewTexture(width, height, MetalGpuDevice.PixelFormatStencil8, 1, renderTarget: true);
         _texture = new MetalTexture(texture, width, height, GpuFilter.Linear, owns: false);
     }
 
@@ -763,7 +760,7 @@ internal sealed class MetalRenderTarget : GpuRenderTarget
 
     public nint PixelFormat { get; }
     public nint ColorTexture { get; private set; }
-    public nint DepthStencilTexture { get; private set; }
+    public nint StencilTexture { get; private set; }
     public override GpuTexture? Texture => Samples == 1 ? _texture : null;
 
     /// <summary>A full clear waiting for the next pass's load action.</summary>
@@ -783,13 +780,13 @@ internal sealed class MetalRenderTarget : GpuRenderTarget
         Release();
         ColorTexture = _device.NewTexture(width, height, PixelFormat, samples, renderTarget: true);
         if (HasDepthStencil)
-            DepthStencilTexture = _device.NewTexture(width, height, MetalGpuDevice.PixelFormatDepth32Stencil8, samples, renderTarget: true);
+            StencilTexture = _device.NewTexture(width, height, MetalGpuDevice.PixelFormatStencil8, samples, renderTarget: true);
         Width = width;
         Height = height;
         Samples = samples;
         _requestedSamples = samples;
         if (samples == 1) _texture = new MetalTexture(ColorTexture, width, height, GpuFilter.Linear, owns: false);
-        _device.Resources.Target(Id, (long)width * height * (HasDepthStencil ? 9 : 4) * samples);
+        _device.Resources.Target(Id, (long)width * height * (HasDepthStencil ? 5 : 4) * samples);
     }
 
     public override void Release()
@@ -797,8 +794,8 @@ internal sealed class MetalRenderTarget : GpuRenderTarget
         _device.Forget(this);
         if (_external)
         {
-            ObjC.Release(DepthStencilTexture);
-            DepthStencilTexture = 0;
+            ObjC.Release(StencilTexture);
+            StencilTexture = 0;
             _texture?.Abandon();
             return;
         }
@@ -806,8 +803,8 @@ internal sealed class MetalRenderTarget : GpuRenderTarget
         _texture?.Abandon();
         _texture = null;
         ObjC.Release(ColorTexture);
-        ObjC.Release(DepthStencilTexture);
-        ColorTexture = DepthStencilTexture = 0;
+        ObjC.Release(StencilTexture);
+        ColorTexture = StencilTexture = 0;
         Width = Height = 0;
         Samples = 1;
         _requestedSamples = 0;

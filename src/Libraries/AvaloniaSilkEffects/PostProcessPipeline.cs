@@ -234,12 +234,13 @@ internal sealed class PostProcessPipeline : IDisposable
         _source = device.CreateRenderTarget(depthStencil: true);
         _multisampleSource = device.CreateRenderTarget(depthStencil: true);
         _maxSamples = device.MaxSamples;
+        // Fullscreen filter passes never draw masks. Only the scene sources need stencil storage.
         _bloomDown = CreateChain(device, BloomLevels);
         _bloomUp = CreateChain(device, BloomLevels);
         _blurDown = CreateChain(device, BlurLevels);
         _blurUp = CreateChain(device, BlurLevels);
-        _streakPing = device.CreateRenderTarget(depthStencil: true);
-        _streakPong = device.CreateRenderTarget(depthStencil: true);
+        _streakPing = device.CreateRenderTarget(depthStencil: false);
+        _streakPong = device.CreateRenderTarget(depthStencil: false);
         _downShader = device.CreateShader(FullscreenVertex, DownFragment, "effects-dual-down");
         _upShader = device.CreateShader(FullscreenVertex, UpFragment, "effects-dual-up");
         _streakShader = device.CreateShader(FullscreenVertex, StreakFragment, "effects-streak");
@@ -300,8 +301,8 @@ internal sealed class PostProcessPipeline : IDisposable
         if (settings.UseSonnetPasses)
         {
             _sonnetShader ??= device.CreateShader(FullscreenVertex, Sonnet.SonnetFilterShader.Fragment, "sonnet-material");
-            _sonnetPing ??= device.CreateRenderTarget(depthStencil: true);
-            _sonnetPong ??= device.CreateRenderTarget(depthStencil: true);
+            _sonnetPing ??= device.CreateRenderTarget(depthStencil: false);
+            _sonnetPong ??= device.CreateRenderTarget(depthStencil: false);
             ReadOnlySpan<float> amounts = [settings.LensDistortion, settings.Grain, settings.Contrast,
                 settings.RgbSplit, settings.Halftone, settings.Vignette];
             var count = 0;
@@ -381,7 +382,7 @@ internal sealed class PostProcessPipeline : IDisposable
     {
         var chain = new GpuRenderTarget[levels];
         for (var index = 0; index < levels; index++)
-            chain[index] = device.CreateRenderTarget(depthStencil: true);
+            chain[index] = device.CreateRenderTarget(depthStencil: false);
         return chain;
     }
 

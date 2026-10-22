@@ -64,8 +64,8 @@ public sealed class LatentBackgroundScene : EffectScene
             _mesh = _gpu.CreateShader(Vertex,LatentShaders.Mesh,"Folia latent mesh");
             _dither = _gpu.CreateShader(Vertex,LatentShaders.Dither,"Folia latent dither");
             _composite = _gpu.CreateShader(Vertex,Composite,"Folia latent soft-light");
-            _meshBuffer = _gpu.CreateRenderTarget(depthStencil: true);
-            _ditherBuffer = _gpu.CreateRenderTarget(depthStencil: true);
+            _meshBuffer = _gpu.CreateRenderTarget(depthStencil: false);
+            _ditherBuffer = _gpu.CreateRenderTarget(depthStencil: false);
         }
         catch { DisposeGpuResources(); throw; }
     }

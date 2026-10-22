@@ -55,7 +55,8 @@ internal sealed class TemperaMeshBuffer(GpuDevice gpu) : IDisposable
 internal sealed class TemperaSurface(GpuDevice gpu) : IDisposable
 {
     private readonly GpuRenderTarget _multisample = gpu.CreateRenderTarget(depthStencil: true);
-    private readonly GpuRenderTarget _resolve = gpu.CreateRenderTarget(depthStencil: true);
+    // Only receives resolved color / backdrop copies; all mask draws use _multisample.
+    private readonly GpuRenderTarget _resolve = gpu.CreateRenderTarget(depthStencil: false);
     private int _samples = Math.Min(4, gpu.MaxSamples);
 
     public int Width => _resolve.Width;

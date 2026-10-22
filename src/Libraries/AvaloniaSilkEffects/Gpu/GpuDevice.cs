@@ -102,6 +102,8 @@ internal abstract class GpuDevice : IDisposable
     public abstract GpuTexture CreateTexture(int width, int height, ReadOnlySpan<byte> rgba, GpuFilter filter);
     public abstract GpuBuffer CreateBuffer(ReadOnlySpan<byte> data, bool index);
     public abstract GpuShader CreateShader(string vertexSource, string fragmentSource, string name);
+    /// <summary>Requests stencil-mask storage when true. Effects never test or write depth;
+    /// a backend may provide a stencil-only attachment instead of a combined depth/stencil format.</summary>
     public abstract GpuRenderTarget CreateRenderTarget(bool depthStencil);
 
     public GpuBuffer CreateBuffer<T>(ReadOnlySpan<T> data, bool index = false) where T : unmanaged =>
@@ -210,7 +212,7 @@ internal abstract class GpuBuffer : GpuResource
 }
 
 /// <summary>
-/// A color target (RGBA8) with an optional depth/stencil attachment. Resizing recreates the attachments;
+/// A color target (RGBA8) with an optional stencil-mask attachment (combined with depth on some backends). Resizing recreates the attachments;
 /// <see cref="Texture"/> is null while multisampled (resolve into a single-sample target to sample it).
 /// </summary>
 internal abstract class GpuRenderTarget : GpuResource
