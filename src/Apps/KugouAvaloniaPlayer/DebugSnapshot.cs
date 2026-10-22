@@ -24,7 +24,7 @@ internal static class DebugSnapshot
         window.Opened += async (_, _) =>
         {
             try { await Run(window, vm, dir); }
-            catch (Exception ex) { File.WriteAllText(Path.Combine(dir, "error.txt"), ex.ToString()); }
+            catch (Exception ex) { await File.WriteAllTextAsync(Path.Combine(dir, "error.txt"), ex.ToString()); }
             finally { Environment.Exit(0); }
         };
     }
@@ -71,7 +71,7 @@ internal static class DebugSnapshot
         if (size.Width < 1 || size.Height < 1) return;
         using var rtb = new RenderTargetBitmap(new PixelSize((int)size.Width, (int)size.Height), new Vector(96, 96));
         rtb.Render(visual);
-        rtb.Save(path);
+        rtb.Save(path,PngBitmapEncoderOptions.Default);
     }
 }
 #endif
