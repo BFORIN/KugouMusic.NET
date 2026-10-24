@@ -136,6 +136,13 @@ public partial class FavoritePlaylistService(
             }
 
             var songs = data.Songs ?? new List<PlaylistSong>();
+            // 服务端单页上限 300，大歌单需翻页补齐
+            for (var page = 2; songs.Count < data.Count; page++)
+            {
+                var next = await playlistClient.GetSongsAsync(likePlaylist.ListCreateId, page, 300);
+                if (next?.Songs is not { Count: > 0 } pageSongs) break;
+                songs.AddRange(pageSongs);
+            }
             var remoteCache = BuildCacheModelFromRemote(likePlaylist, songs);
             LikeCacheStateCounts remoteCounts;
             lock (_likeCacheStateLock)
